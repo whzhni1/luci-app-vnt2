@@ -1,0 +1,115 @@
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+STOP=10
+
+. /lib/functions.sh
+
+CF=""
+
+# ── TOML 输出辅助 ──
+_ts() { [ -n "$2" ] && echo "$1 = \"$2\"" >> "$CF"; }
+_ti() { [ -n "$2" ] && echo "$1 = $2"     >> "$CF"; }
+_tb() {
+	if [ "$2" = 1 ]; then
+		echo "$1 = true" >> "$CF"
+	else
+		echo "$1 = false" >> "$CF"
+	fi
+}
+
+# 列表收集
+_WL="" ; _PS=""
+_add_wl() { _WL="${_WL}\"$1\", "; }
+_add_ps() { _PS="${_PS}\"$1\", "; }
+
+# 自定义网段
+_add_cn() {
+	local code net
+	config_get code    "$1" code
+	config_get net     "$1" network
+	[ -n "$code" ] && [ -n "$net" ] && echo "$code = \"$net\"" >> "$CF"
+}
+
+generate_config() {
+	mkdir -p "$(dirname "$CF")"
+	echo '# 由 luci-app-vnt2 自动生成，请勿手动修改' > "$CF"
+
+	local tcp quic ws net dur web usr pwd pers cert key sqb stk
+	config_get tcp  server tcp_bind
+	config_get quic server quic_bind
+	config_get ws   server ws_bind
+	config_get net  server network       '10.26.0.0/24'
+	config_get dur  server lease_duration 86400
+	config_get web  server web_bind
+	config_get usr  server username
+	config_get pwd  server password
+	config_get_bool pers server persistence 1
+	config_get cert server cert
+	config_get key  server key
+	config_get sqb  server server_quic_bind
+	config_get stk  server server_token
+
+	# 至少需要一个监听地址
+	[ -z "$tcp" ] && [ -z "$quic" ] && [ -z "$ws" ] && {
+		logger -t vnt2_server "至少需要设置一个监听地址(TCP/QUIC/WSS)"
+		return 1
+	}
+
+	_ts tcp_bind  "$tcp"
+	_ts quic_bind "$quic"
+	_ts ws_bind   "$ws"
+	_ts network   "$net"
+
+	# white_list
+	_WL=""
+	config_list_foreach server white_list _add_wl
+	_WL=$(echo "$_WL" | sed 's/, $//')
+	echo "white_list = [${_WL}]" >> "$CF"
+
+	_ti lease_duration "$dur"
+	_ts web_bind  "$web"
+	_ts username  "$usr"
+	_ts password  "$pwd"
+	_tb persistence "$pers"
+	_ts cert      "$cert"
+	_ts key       "$key"
+	_ts server_quic_bind "$sqb"
+
+	# peer_servers
+	_PS=""
+	config_list_foreach server peer_servers _add_ps
+	if [ -n "$_PS" ]; then
+		_PS=$(echo "$_PS" | sed 's/, $//')
+		echo "peer_servers = [${_PS}]" >> "$CF"
+	fi
+
+	_ts server_token "$stk"
+	echo "" >> "$CF"
+	echo "[custom_nets]" >> "$CF"
+	config_foreach _add_cn custom_net
+}
+
+start_service() {
+	config_load vnt2
+
+	local enabled; config_get_bool enabled server enabled 0
+	[ "$enabled" = 1 ] || return 0
+
+	local srv_bin
+	config_get srv_bin globals server_bin '/usr/bin/vnts2'
+	config_get CF      globals server_conf '/var/etc/vnts2.toml'
+	[ -x "$srv_bin" ] || { logger -t vnt2_server "$srv_bin 未找到"; return 1; }
+
+	generate_config || return 1
+
+	procd_open_instance vnts2
+	procd_set_param command "$srv_bin" -c "$CF"
+	procd_set_param respawn
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+service_triggers() { procd_add_reload_trigger vnt2; }
