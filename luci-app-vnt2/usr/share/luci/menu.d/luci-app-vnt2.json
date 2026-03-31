@@ -1,0 +1,33 @@
+{
+	"admin/vpn/vnt2": {
+		"title": "VNT2",
+		"order": 45,
+		"action": { "type": "firstchild" },
+		"depends": { "acl": ["luci-app-vnt2"] }
+	},
+	"admin/vpn/vnt2/status": {
+		"title": "运行状态",
+		"order": 10,
+		"action": { "type": "view", "path": "vnt2/status" }
+	},
+	"admin/vpn/vnt2/client": {
+		"title": "客户端配置",
+		"order": 20,
+		"action": { "type": "view", "path": "vnt2/client" }
+	},
+	"admin/vpn/vnt2/server": {
+		"title": "服务端配置",
+		"order": 30,
+		"action": { "type": "view", "path": "vnt2/server" }
+	},
+	"admin/vpn/vnt2/log": {
+		"title": "日志",
+		"order": 40,
+		"action": { "type": "view", "path": "vnt2/log" }
+	},
+	"admin/vpn/vnt2/settings": {
+		"title": "程序设置",
+		"order": 50,
+		"action": { "type": "view", "path": "vnt2/settings" }
+	}
+}
