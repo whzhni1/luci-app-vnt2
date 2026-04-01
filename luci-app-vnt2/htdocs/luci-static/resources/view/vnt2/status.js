@@ -54,15 +54,33 @@ function svcButtons(initName) {
 	);
 }
 
-function webButton(label, addr, pid) {
-	if (!addr || pid <= 0) return E('span');
+/* ── 从绑定地址中提取端口号 ── */
+function extractPort(bindAddr) {
+	if (!bindAddr) return null;
+	var m = bindAddr.match(/:(\d+)$/);
+	return m ? m[1] : null;
+}
+
+/* ── 生成 Web 访问按钮 ── */
+function webAccessButton(label, bindAddr, running) {
+	var port = extractPort(bindAddr);
+	if (!port || !running) {
+		// 未配置或未运行时返回灰色禁用按钮
+		return E('button', {
+			'class': 'btn cbi-button',
+			disabled: 'disabled',
+			style: 'margin-left:10px;opacity:0.5;cursor:not-allowed'
+		}, label);
+	}
+	// 用当前浏览器访问的 IP 拼接端口
 	var host = window.location.hostname;
-	var port = addr.replace(/^.*:/, '');
 	var url = 'http://' + host + ':' + port;
 	return E('a', {
 		'class': 'btn cbi-button cbi-button-action',
-		href: url, target: '_blank',
-		style: 'margin-left:10px'
+		href: url,
+		target: '_blank',
+		rel: 'noopener noreferrer',
+		style: 'margin-left:10px;text-decoration:none'
 	}, label);
 }
 
@@ -89,16 +107,27 @@ return view.extend({
 	render: function(data) {
 		var cUp = data[1], sUp = data[2];
 
+		/* 读取 Web 地址配置用于按钮 */
+		var clientWebAddr = uci.get('vnt2', 'client', 'web_addr') || '';
+		var clientWebOn   = uci.get('vnt2', 'client', 'web_enabled') || '0';
+		var serverWebBind = uci.get('vnt2', 'server', 'web_bind') || '';
+
 		var body = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, 'VNT2 运行状态'),
 
 			/* ── 客户端状态 ── */
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, '客户端 (vnt2)'),
-				E('p', {}, [
+				E('div', { style: 'display:flex;align-items:center;flex-wrap:wrap;margin-bottom:6px' }, [
 					E('strong', {}, '状态：'),
 					E('span', { id: 'cb' }, badge(cUp)),
-					E('span', { id: 'cli_web_btn' })
+					E('span', { id: 'cli_web_btn' },
+						webAccessButton(
+							'🌐 打开 VNT Web 管理',
+							clientWebOn === '1' ? clientWebAddr : '',
+							cUp
+						)
+					)
 				]),
 				svcButtons('vnt2_client'),
 				E('div', { id: 'cdet', style: cUp ? '' : 'display:none' }, [
@@ -112,10 +141,16 @@ return view.extend({
 			/* ── 服务端状态 ── */
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, '服务端 (vnts2)'),
-				E('p', {}, [
+				E('div', { style: 'display:flex;align-items:center;flex-wrap:wrap;margin-bottom:6px' }, [
 					E('strong', {}, '状态：'),
 					E('span', { id: 'sb' }, badge(sUp)),
-					E('span', { id: 'srv_web_btn' })
+					E('span', { id: 'srv_web_btn' },
+						webAccessButton(
+							'🌐 打开 VNTS Web 管理',
+							serverWebBind,
+							sUp
+						)
+					)
 				]),
 				svcButtons('vnt2_server')
 			])
@@ -133,19 +168,31 @@ return view.extend({
 				var sRun = (d.server_pid || 0) > 0;
 				var wRun = (d.web_pid || 0) > 0;
 
+				/* 更新状态徽章 */
 				dom.content(document.getElementById('cb'), badge(cRun));
 				dom.content(document.getElementById('sb'), badge(sRun));
 
-				// 客户端 Web 快捷入口
+				/* 更新客户端 Web 按钮（只有 web_enabled 且 vnt2_web 进程存在时可用） */
 				var cwb = document.getElementById('cli_web_btn');
-				if (cwb) dom.content(cwb,
-					webButton('进入 VNT Web 管理', d.client_web_addr, wRun ? 1 : 0));
+				if (cwb) {
+					dom.content(cwb, webAccessButton(
+						'🌐 打开 VNT Web 管理',
+						d.client_web_addr || '',
+						cRun && wRun
+					));
+				}
 
-				// 服务端 Web 快捷入口
+				/* 更新服务端 Web 按钮（服务端运行且配置了 web_bind 时可用） */
 				var swb = document.getElementById('srv_web_btn');
-				if (swb) dom.content(swb,
-					webButton('进入 VNTS Web 管理', d.server_web_bind, sRun ? d.server_pid : 0));
+				if (swb) {
+					dom.content(swb, webAccessButton(
+						'🌐 打开 VNTS Web 管理',
+						d.server_web_bind || '',
+						sRun
+					));
+				}
 
+				/* 详情面板 */
 				var det = document.getElementById('cdet');
 				if (det) det.style.display = cRun ? '' : 'none';
 
