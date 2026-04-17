@@ -1,7 +1,0 @@
-#!/bin/sh
-chmod +x /usr/share/vnt2/vnt2_api.sh 2>/dev/null
-chmod +x /etc/init.d/vnt2_client 2>/dev/null
-chmod +x /etc/init.d/vnt2_server 2>/dev/null
-rm -f /tmp/luci-indexcache
-rm -rf /tmp/luci-modulecache/
-exit 0
