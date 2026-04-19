@@ -1,0 +1,8 @@
+config vnt2 'global'
+	option bin_path '/usr/bin'
+	option config_path '/etc/vnt2_config'
+	option arch ''
+	option mirror 'github'
+	option auto_update '0'
+	option update_interval '7'
+	option upx_compressed '0'

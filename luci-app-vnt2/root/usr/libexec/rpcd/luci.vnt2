@@ -1,0 +1,897 @@
+#!/usr/bin/ucode
+// /usr/libexec/rpcd/luci.vnt2
+
+'use strict';
+
+import { readfile, writefile, stat, lsdir, unlink, popen, open } from "fs";
+import { cursor } from "uci";
+
+const DEFAULTS = {
+    bin_path:    "/usr/bin",
+    config_path: "/etc/vnt2_config",
+    run_dir:     "/var/run",
+};
+
+const START_METHODS = {
+    vnt:  ["vnt2_cli", "vnt2_web"],
+    vnts: ["vnts2"],
+};
+
+const API_URLS = {
+    github: (p) => `https://api.github.com/repos/vnt-dev/${p}/releases`,
+    gitee:  (p) => `https://gitee.com/api/v5/repos/whzhni/${p}/releases`,
+    gitlab: (p) => `https://gitlab.com/api/v4/projects/whzhni%2F${p}/releases`,
+};
+
+const SETTING_DEFS = [
+    ["bin_path",        "/usr/bin"        ],
+    ["config_path",     "/etc/vnt2_config"],
+    ["arch",            ""                ],
+    ["mirror",          "github"          ],
+    ["auto_update",     "0"               ],
+    ["update_interval", "7"               ],
+    ["upx_compressed",  "0"               ],
+];
+
+let CFG = {
+    bin_path:    DEFAULTS.bin_path,
+    config_path: DEFAULTS.config_path,
+    run_dir:     DEFAULTS.run_dir,
+};
+
+function system(cmd) {
+    let p = popen(cmd, "r");
+    if (!p) return -1;
+    p.read("all");
+    return p.close();
+}
+
+function execOutput(cmd) {
+    let p   = popen(cmd, "r");
+    let out = p ? p.read("all") : "";
+    if (p) p.close();
+    return out ?? "";
+}
+
+function safeRead(path) {
+    return readfile(path) ?? "";
+}
+
+function writeFile(path, content) {
+    let r = writefile(path, content);
+    return r != null && r > 0;
+}
+
+function fileExists(path) {
+    return stat(path) != null;
+}
+
+function isExecutable(path) {
+    let s = stat(path);
+    return s != null && s.perm != null && s.perm.user_exec === true;
+}
+
+function systemBg(cmd) {
+    let p = popen(cmd, "r");
+    if (!p) return;
+    p.close();
+}
+
+function pidFile(name)        { return `${CFG.run_dir}/vnt2_${name}.pid`; }
+function confFile(name, type) { return `${CFG.config_path}/${name}.${type}`; }
+
+function ensureInstalled(pkg) {
+    if (system(`command -v '${pkg}' > /dev/null 2>&1`) === 0) return true;
+    if (system(`command -v apk > /dev/null 2>&1`) === 0)
+        return system(`apk add '${pkg}' > /dev/null 2>&1`) === 0;
+    return system(`opkg install '${pkg}' > /dev/null 2>&1`) === 0;
+}
+
+function initPaths() {
+    let uci = cursor();
+    uci.load("vnt2");
+    CFG.bin_path    = uci.get("vnt2", "global", "bin_path")    || DEFAULTS.bin_path;
+    CFG.config_path = uci.get("vnt2", "global", "config_path") || DEFAULTS.config_path;
+    system(`mkdir -p '${CFG.config_path}' '${CFG.run_dir}'`);
+}
+
+function getMirror(args) {
+    if (args.mirror) return args.mirror;
+    let uci = cursor();
+    uci.load("vnt2");
+    return uci.get("vnt2", "global", "mirror") || "github";
+}
+
+function buildApiUrl(mirror, project) {
+    return (API_URLS[mirror] ?? API_URLS.gitlab)(project);
+}
+
+function getDeviceModel() {
+    let model = trim(safeRead("/tmp/sysinfo/model"));
+    if (model) return model;
+    return replace(trim(execOutput("cat /proc/device-tree/model 2>/dev/null")), /\x00/g, "");
+}
+
+function readField(file, field) {
+    let content = safeRead(file);
+    let lines   = split(content, "\n");
+    for (let i = 0; i < length(lines); i++) {
+        let line = trim(lines[i]);
+        let m    = match(line, regexp("^" + field + "\\s*=\\s*(.+)$"));
+        if (m) return replace(m[1], /^\s*["']?|["']?\s*$/g, "");
+    }
+    return "";
+}
+
+function listConfFiles(filter) {
+    let exts   = (filter && filter !== "all") ? [filter] : ["vnt", "vnts"];
+    let result = [];
+    let files  = lsdir(CFG.config_path) ?? [];
+    for (let ei = 0; ei < length(exts); ei++) {
+        let ext    = exts[ei];
+        let suffix = "." + ext;
+        let slen   = length(suffix);
+        for (let fi = 0; fi < length(files); fi++) {
+            let f    = files[fi];
+            let flen = length(f);
+            if (flen > slen && substr(f, flen - slen) === suffix) {
+                let name = substr(f, 0, flen - slen);
+                push(result, { name, type: ext, file: confFile(name, ext) });
+            }
+        }
+    }
+    return result;
+}
+
+function getActualNames(type) {
+    let files  = lsdir(CFG.config_path) ?? [];
+    let suffix = "." + type;
+    let slen   = length(suffix);
+    let names  = [];
+    for (let i = 0; i < length(files); i++) {
+        let f    = files[i];
+        let flen = length(f);
+        if (flen > slen && substr(f, flen - slen) === suffix)
+            push(names, substr(f, 0, flen - slen));
+    }
+    return names;
+}
+
+function pidAlive(pid) {
+    if (!pid || int(pid) <= 0) return false;
+    return fileExists(`/proc/${pid}`);
+}
+
+function isRunning(name) {
+    let pid = trim(safeRead(pidFile(name)));
+    return length(pid) > 0 && pidAlive(pid);
+}
+
+function readPid(name) {
+    return trim(safeRead(pidFile(name)));
+}
+
+function getType(name) {
+    if (fileExists(confFile(name, "vnt")))  return "vnt";
+    if (fileExists(confFile(name, "vnts"))) return "vnts";
+    return null;
+}
+
+function uciEach(uci, type, cb) {
+    uci.foreach("vnt2", type, (s) => cb(s[".name"], s));
+}
+
+function getStartMethod(name, type) {
+    let uci    = cursor();
+    uci.load("vnt2");
+    let method = null;
+    uciEach(uci, type, (sid, s) => {
+        if (s.name === name) { method = s.start_method; return false; }
+    });
+    return method || START_METHODS[type][0];
+}
+
+function buildStartCmd(name, type) {
+    let conf   = confFile(name, type);
+    let method = getStartMethod(name, type);
+    if (type === "vnt") {
+        if (method === "vnt2_web") {
+            let wa = readField(conf, "web_addr");
+            if (!wa) return null;
+            return `${CFG.bin_path}/vnt2_web --addr ${wa} --conf ${conf}`;
+        }
+        return `${CFG.bin_path}/vnt2_cli --conf ${conf}`;
+    }
+    if (type === "vnts")
+        return `${CFG.bin_path}/vnts2 -c ${conf}`;
+    return null;
+}
+
+function readCpuTicks(pid) {
+    let pstat  = safeRead(`/proc/${pid}/stat`);
+    let upstat = safeRead("/proc/stat");
+    let pp     = split(pstat, " ");
+    let sp     = split(trim(split(upstat, "\n")[0]), /\s+/);
+    let proc   = int(pp[13]) + int(pp[14]) + int(pp[15]) + int(pp[16]);
+    let total  = 0;
+    for (let i = 1; i < length(sp); i++) total += int(sp[i]);
+    return { proc, total };
+}
+
+function cmdGetCpuTicks(args) {
+    let name = args.name;
+    let pid  = trim(safeRead(pidFile(name)));
+    if (!pid || !pidAlive(pid))
+        return { name, proc: 0, total: 0, alive: false };
+    let ticks = readCpuTicks(pid);
+    return { name, proc: ticks.proc, total: ticks.total, alive: true };
+}
+
+function instanceInfo(name) {
+    let type     = getType(name);
+    let running  = isRunning(name);
+    let pid      = running ? readPid(name) : "";
+    let uptime   = 0;
+    let mem      = "0";
+    let web_addr = "";
+    if (running && pid) {
+        let hz      = int(trim(execOutput("getconf CLK_TCK 2>/dev/null"))) || 100;
+        let sparts  = split(safeRead(`/proc/${pid}/stat`), " ");
+        let uptData = safeRead("/proc/uptime");
+        let startJ  = int(sparts[21]);
+        let uptSec  = int(split(trim(uptData), " ")[0]);
+        if (startJ && uptSec) {
+            uptime = uptSec - int(startJ / hz);
+            if (uptime < 0) uptime = 0;
+        }
+        let mlines = split(safeRead(`/proc/${pid}/status`), "\n");
+        for (let i = 0; i < length(mlines); i++) {
+            let m = match(mlines[i], /^VmRSS:\s*(\d+)/);
+            if (m) { mem = sprintf("%.1f", int(m[1]) / 1024); break; }
+        }
+        let conf = confFile(name, type);
+        if (type === "vnt")
+            web_addr = readField(conf, "web_addr");
+        else if (type === "vnts")
+            web_addr = readField(conf, "web_bind");
+    }
+
+    return { name, type: type ?? "unknown", running, pid, web_addr, uptime, mem };
+}
+
+function fwAddRule(uci, id, proto, port) {
+    if (!port || port === "0") return;
+    uci.set("firewall", id, "rule");
+    uci.set("firewall", id, "name",      id);
+    uci.set("firewall", id, "src",       "wan");
+    uci.set("firewall", id, "proto",     proto);
+    uci.set("firewall", id, "dest_port", port);
+    uci.set("firewall", id, "target",    "ACCEPT");
+    uci.set("firewall", id, "enabled",   "1");
+}
+
+function extractPort(addr) {
+    if (!addr) return "";
+    let parts = split(addr, ":");
+    let port  = parts[length(parts) - 1];
+    if (!match(port, /^\d+$/) || int(port) < 1 || int(port) > 65535)
+        return "";
+    return port;
+}
+
+function fwRemove(name) {
+    let uci     = cursor();
+    uci.load("firewall");
+    let changed = false;
+    uci.foreach("firewall", "rule", (s) => {
+        if (s.name && index(s.name, `vnt2_${name}_`) === 0) {
+            uci.delete("firewall", s[".name"]);
+            changed = true;
+        }
+    });
+    if (changed) {
+        uci.commit("firewall");
+        systemBg("fw4 reload > /dev/null 2>&1 &");
+    }
+}
+
+function fwApply(name, type, conf) {
+    fwRemove(name);
+    let uci = cursor();
+    uci.load("firewall");
+    if (type === "vnt") {
+        let ctrlPort = extractPort(readField(conf, "ctrl_port") || "11233");
+        fwAddRule(uci, `vnt2_${name}_ctrl`, "tcp", ctrlPort);
+        let waPort = extractPort(readField(conf, "web_addr"));
+        fwAddRule(uci, `vnt2_${name}_web`, "tcp", waPort);
+    } else if (type === "vnts") {
+        let binds = [
+            ["tcp_bind",  "tcp"],
+            ["quic_bind", "udp"],
+            ["ws_bind",   "tcp"],
+            ["web_bind",  "tcp"],
+        ];
+        for (let i = 0; i < length(binds); i++) {
+            let port = extractPort(readField(conf, binds[i][0]));
+            if (!port) continue;
+            fwAddRule(uci, `vnt2_${name}_${binds[i][0]}`, binds[i][1], port);
+        }
+    }
+    uci.commit("firewall");
+    systemBg("fw4 reload > /dev/null 2>&1 &");
+}
+
+function doStart(name) {
+    initPaths();
+    let type = getType(name);
+    if (!type)           return { result: "error", msg: "配置文件不存在" };
+    if (isRunning(name)) return { result: "already_running" };
+    let conf = confFile(name, type);
+    let cmd  = buildStartCmd(name, type);
+    if (!cmd) return { result: "error", msg: "无法构建启动命令" };
+    fwApply(name, type, conf);
+    let pf = pidFile(name);
+    system(`sh -c '${cmd} > /dev/null 2>&1 & echo $! > "${pf}"'`);
+    system("sleep 1");
+    let pid = trim(safeRead(pf));
+    if (pidAlive(pid)) return { result: "ok", pid };
+    unlink(pf);
+    return { result: "error", msg: "启动失败" };
+}
+
+function doStop(name) {
+    if (!isRunning(name)) return { result: "not_running" };
+    let pid  = readPid(name);
+    let type = getType(name);
+    let conf = confFile(name, type);
+    system(`pkill -f '${conf}' 2>/dev/null`);
+    system("sleep 1");
+    if (pidAlive(pid)) system(`kill -9 ${pid} 2>/dev/null`);
+    unlink(pidFile(name));
+    fwRemove(name);
+    return { result: "ok" };
+}
+
+function doRestart(name) {
+    doStop(name);
+    system("sleep 1");
+    return doStart(name);
+}
+
+function cmdGetLog(args) {
+    let name  = args.name;
+    let lines = int(args.lines) || 200;
+    let pid = trim(safeRead(pidFile(name)));
+    if (!pid || !pidAlive(pid))
+        return { content: "" };
+    let out = execOutput(
+        `logread 2>/dev/null | grep -F '[${pid}]' | tail -n ${lines}`
+    );
+    return { content: out ?? "" };
+}
+
+function cmdClearLog(args) {
+    return {
+        result: "ok",
+        msg:    "日志将在系统重启后自动清空。",
+    };
+}
+
+function cmdGetEnabled(args) {
+    initPaths();
+    let type     = args.type;
+    let names    = getActualNames(type);
+    let uci      = cursor();
+    uci.load("vnt2");
+    let uciState = {};
+    uciEach(uci, type, (sid, s) => {
+        if (s.name) uciState[s.name] = {
+            enabled:      s.enabled === "1",
+            start_method: s.start_method || START_METHODS[type][0],
+            method_set:   s.method_set === "1",
+        };
+    });
+    let configs = [];
+    for (let i = 0; i < length(names); i++) {
+        let name     = names[i];
+        let s        = uciState[name] ?? {
+            enabled:      false,
+            start_method: START_METHODS[type][0],
+            method_set:   false,
+        };
+        let web_addr = (type === "vnt")
+            ? readField(confFile(name, type), "web_addr") : "";
+        push(configs, {
+            name,
+            enabled:      s.enabled,
+            start_method: s.start_method,
+            method_set:   s.method_set,
+            web_addr,
+        });
+    }
+    return { configs };
+}
+
+function cmdSetEnabled(args) {
+    let cfgType = args.type;
+    let uci     = cursor();
+    uci.load("vnt2");
+    let old = [];
+    uciEach(uci, cfgType, (sid) => push(old, sid));
+    for (let i = 0; i < length(old); i++)
+        uci.delete("vnt2", old[i]);
+    let actualNames = getActualNames(cfgType);
+    let actualSet   = {};
+    for (let i = 0; i < length(actualNames); i++)
+        actualSet[actualNames[i]] = true;
+    let list = (type(args.configs) === "array") ? args.configs : [];
+    let idx  = 0;
+    for (let i = 0; i < length(list); i++) {
+        let item = list[i];
+        if (!item.name || !actualSet[item.name]) continue;
+        let sid = `cfg_${cfgType}_${idx}`;
+        uci.set("vnt2", sid, cfgType);
+        uci.set("vnt2", sid, "name",         item.name);
+        uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
+        uci.set("vnt2", sid, "start_method",
+                item.start_method || START_METHODS[cfgType][0]);
+        uci.set("vnt2", sid, "method_set",   "1");
+        idx++;
+    }
+    uci.commit("vnt2");
+    for (let i = 0; i < length(list); i++) {
+        let item = list[i];
+        if (!item.name || !actualSet[item.name]) continue;
+        if (item.enabled) {
+            if (!isRunning(item.name)) doStart(item.name);
+        } else {
+            if (isRunning(item.name))  doStop(item.name);
+        }
+    }
+
+    return { result: "ok" };
+}
+
+function cmdListInstances() {
+    initPaths();
+    let files     = listConfFiles("all");
+    let seen      = {};
+    let instances = [];
+    for (let i = 0; i < length(files); i++) {
+        let name = files[i].name;
+        if (seen[name]) continue;
+        seen[name] = true;
+        push(instances, instanceInfo(name));
+    }
+    return { instances };
+}
+
+function cmdListConfigs(args) {
+    initPaths();
+    return { configs: listConfFiles(args.filter || "all") };
+}
+
+function cmdReadConfig(args) {
+    initPaths();
+    let file = confFile(args.name, args.type);
+    if (!fileExists(file)) return { error: "文件不存在" };
+    return { content: safeRead(file) };
+}
+
+function cmdReadTemplate(args) {
+    initPaths();
+    let tmpl = `${CFG.config_path}/${args.type}.config`;
+    if (!fileExists(tmpl)) return { error: "模板不存在" };
+    return { content: safeRead(tmpl) };
+}
+
+function cmdGetTemplateFields(args) {
+    initPaths();
+    let tmpl = `${CFG.config_path}/${args.type}.config`;
+    if (!fileExists(tmpl)) return { fields: [] };
+    return { fields: parseTemplateFields(safeRead(tmpl)) };
+}
+
+function cmdSaveConfig(args) {
+    initPaths();
+    let file = confFile(args.name, args.type);
+    return writeFile(file, args.content)
+        ? { result: "ok", file }
+        : { result: "error", msg: "写入失败" };
+}
+
+function cmdDeleteConfig(args) {
+    initPaths();
+    doStop(args.name);
+    fwRemove(args.name);
+    let file = confFile(args.name, args.type);
+    if (!fileExists(file)) return { result: "error", msg: "文件不存在" };
+    unlink(file);
+    let uci = cursor();
+    uci.load("vnt2");
+    let toDelete = [];
+    uciEach(uci, args.type, (sid, s) => {
+        if (s.name === args.name) push(toDelete, sid);
+    });
+    for (let i = 0; i < length(toDelete); i++)
+        uci.delete("vnt2", toDelete[i]);
+    if (length(toDelete) > 0)
+        uci.commit("vnt2");
+    return { result: "ok" };
+}
+
+function cmdGetCtrlInfo(args) {
+    initPaths();
+    let type = getType(args.name);
+    if (type !== "vnt") return { output: "非客户端实例" };
+    let conf = confFile(args.name, "vnt");
+    let port = readField(conf, "ctrl_port") || "11233";
+    if (port === "0") return { output: "控制端口已禁用" };
+    let out = execOutput(`${CFG.bin_path}/vnt2_ctrl -p ${port} ${args.cmd} 2>&1`);
+    return { output: replace(out, /\x1b\[[0-9;]*m/g, "") };
+}
+
+function cmdGetSystemInfo() {
+    initPaths();
+    let arch = trim(execOutput("uname -m 2>/dev/null"));
+    let r    = { arch, bin_path: CFG.bin_path, config_path: CFG.config_path };
+    let vers = [
+        ["vnt_version",  "vnt2_cli"],
+        ["vnts_version", "vnts2"   ],
+    ];
+    for (let i = 0; i < length(vers); i++)
+        r[vers[i][0]] = trim(execOutput(
+            `'${CFG.bin_path}/${vers[i][1]}' --version 2>/dev/null | head -1`
+        ));
+    return r;
+}
+
+function cmdCheckBinaries() {
+    initPaths();
+    let r    = {};
+    let bins = ["vnt2_cli", "vnt2_web", "vnt2_ctrl", "vnts2"];
+    for (let i = 0; i < length(bins); i++)
+        r[bins[i]] = isExecutable(`${CFG.bin_path}/${bins[i]}`);
+    return r;
+}
+
+function cmdGetSettings() {
+    let uci = cursor();
+    uci.load("vnt2");
+    let r = {};
+    for (let i = 0; i < length(SETTING_DEFS); i++)
+        r[SETTING_DEFS[i][0]] = uci.get("vnt2", "global", SETTING_DEFS[i][0])
+                                 || SETTING_DEFS[i][1];
+    return r;
+}
+
+function cmdSaveSettings(args) {
+    let uci = cursor();
+    uci.load("vnt2");
+    for (let i = 0; i < length(SETTING_DEFS); i++) {
+        let k = SETTING_DEFS[i][0];
+        if      (k === "auto_update")     uci.set("vnt2", "global", k, args[k] ? "1" : "0");
+        else if (k === "upx_compressed")  uci.set("vnt2", "global", k, args[k] ? "1" : "0");
+        else if (k === "update_interval") uci.set("vnt2", "global", k, `${int(args[k]) || 7}`);
+        else                              uci.set("vnt2", "global", k, args[k] ?? "");
+    }
+    uci.commit("vnt2");
+    initPaths();
+    return { result: "ok" };
+}
+
+function extractAssets(raw, project) {
+    let result = [];
+    let seen   = {};
+    let parts  = split(raw, '"');
+    for (let i = 0; i < length(parts); i++) {
+        let s = parts[i];
+        if (substr(s, 0, 8) !== "https://") continue;
+        if (index(s, project) < 0)           continue;
+        if (index(s, "linux") < 0)           continue;
+        if (seen[s])                          continue;
+        seen[s] = true;
+        let nm  = match(s, /\/([^\/]+)$/);
+        push(result, { name: nm ? nm[1] : s, url: s });
+    }
+    return result;
+}
+
+function cmdGetUpstreamVersion(args) {
+    if (!ensureInstalled("curl"))
+        return { releases: [], error: "curl 不可用且安装失败" };
+    let url = buildApiUrl(getMirror(args), args.project);
+    let raw = execOutput(`curl -fsSL --connect-timeout 10 --max-time 30 '${url}' 2>/dev/null`);
+    if (!raw) return { releases: [] };
+    let releases = [];
+    let parts    = split(raw, '"tag_name"');
+    for (let i = 1; i < length(parts); i++) {
+        let tagM = match(parts[i], /^\s*:\s*"([^"]+)"/);
+        if (!tagM) continue;
+        let assets = extractAssets(parts[i], args.project);
+        if (length(assets) === 0) continue;
+        push(releases, { tag: tagM[1], assets });
+    }
+    return { releases };
+}
+
+function detectFileType(path) {
+    let f = open(path, "r");
+    if (!f) return null;
+    let magic = f.read(8);
+    f.close();
+    let sigs = [
+        [0x7f, 0x45, 0x4c, 0x46, "elf"],
+        [0x1f, 0x8b,             "gz" ],
+        [0x50, 0x4b, 0x03, 0x04, "zip"],
+    ];
+    for (let i = 0; i < length(sigs); i++) {
+        let sig = sigs[i];
+        let ok  = true;
+        for (let j = 0; j < length(sig) - 1; j++) {
+            if (ord(magic, j) !== sig[j]) { ok = false; break; }
+        }
+        if (ok) return sig[length(sig) - 1];
+    }
+    return null;
+}
+
+function installOne(src, bin, upx) {
+    let dst = `${CFG.bin_path}/${bin}`;
+    if (upx && ensureInstalled("upx")) {
+        if (system(`upx -q '${src}' -o '${dst}' 2>/dev/null`) !== 0)
+            system(`cp '${src}' '${dst}'`);
+    } else {
+        system(`cp '${src}' '${dst}'`);
+    }
+    system(`chmod 755 '${dst}'`);
+}
+
+function installBinary(tmp, project, upx) {
+    let bins  = (project === "vnt")
+        ? ["vnt2_cli", "vnt2_web", "vnt2_ctrl"]
+        : ["vnts2"];
+    let installed = [];
+    let msg       = "";
+    let ftype     = detectFileType(tmp);
+    if (ftype === "gz" || ftype === "zip") {
+        let dir = "/tmp/vnt2_upd_dir";
+        system(`mkdir -p '${dir}'`);
+        if (ftype === "gz") {
+            system(`tar -xzf '${tmp}' -C '${dir}' 2>/dev/null`);
+        } else {
+            if (!ensureInstalled("unzip")) {
+                unlink(tmp);
+                return { result: "error", msg: "unzip 不可用且安装失败" };
+            }
+            system(`unzip -o '${tmp}' -d '${dir}' 2>/dev/null`);
+        }
+        for (let i = 0; i < length(bins); i++) {
+            let bin = bins[i];
+            let src = trim(execOutput(
+                `find '${dir}' -name '${bin}' -type f 2>/dev/null | head -1`
+            ));
+            if (!src || detectFileType(src) !== "elf") {
+                msg += `未找到或无效: ${bin}\n`;
+                continue;
+            }
+            installOne(src, bin, upx);
+            push(installed, bin);
+            msg += `已安装 ${bin} -> ${CFG.bin_path}/${bin}\n`;
+        }
+        system(`rm -rf '${dir}'`);
+    } else if (ftype === "elf") {
+        let bin = bins[0];
+        installOne(tmp, bin, upx);
+        push(installed, bin);
+        msg += `已安装 ${bin} -> ${CFG.bin_path}/${bin}\n`;
+    } else {
+        unlink(tmp);
+        return { result: "error", msg: "未知文件格式" };
+    }
+    unlink(tmp);
+    return length(installed) > 0
+        ? { result: "ok", installed: join(", ", installed), msg }
+        : { result: "error", msg: "未找到可安装文件\n" + msg };
+}
+
+function cmdDoUpdate(args) {
+    initPaths();
+    if (!ensureInstalled("curl"))
+        return { result: "error", msg: "curl 不可用且安装失败" };
+    let url = buildApiUrl(getMirror(args), args.project);
+    let raw = execOutput(`curl -fsSL --connect-timeout 10 --max-time 30 '${url}' 2>/dev/null`);
+    if (!raw) return { result: "error", msg: "获取版本信息失败" };
+    let assets = extractAssets(raw, args.project);
+    let dlUrl  = null;
+    for (let i = 0; i < length(assets); i++) {
+        if (assets[i].name === args.filename) { dlUrl = assets[i].url; break; }
+    }
+    if (!dlUrl) return { result: "error", msg: "未找到下载链接" };
+    let tmp = `/tmp/vnt2_upd_${args.filename}`;
+    let rc  = system(
+        `curl -fsSL --connect-timeout 15 --max-time 180 -o '${tmp}' '${dlUrl}' 2>/dev/null`
+    );
+    if (rc !== 0) return { result: "error", msg: "下载失败" };
+    return installBinary(tmp, args.project, args.upx);
+}
+
+function inferType(rawVal) {
+    if (rawVal === "true" || rawVal === "false") return "bool";
+    if (substr(rawVal, 0, 1) === "[")            return "array";
+    if (match(rawVal, /^\d+$/))                  return "int";
+    return "string";
+}
+
+function parseDefaultValue(rawVal, ftype) {
+    if (ftype === "bool")  return rawVal === "true";
+    if (ftype === "int")   return int(rawVal) || 0;
+    if (ftype === "array") {
+        let inner = trim(replace(rawVal, /^\[|\]$/g, ""));
+        if (!inner) return [];
+        let items = [];
+        let parts = split(inner, ",");
+        for (let i = 0; i < length(parts); i++) {
+            let v = trim(parts[i]);
+            v = replace(v, /^["']|["']$/g, "");
+            if (v) push(items, v);
+        }
+        return items;
+    }
+    return replace(rawVal, /^["']|["']$/g, "");
+}
+
+function parseTemplateFields(content) {
+    let fields  = [];
+    let lines   = split(content, "\n");
+    let pending = [];
+    for (let i = 0; i < length(lines); i++) {
+        let line = trim(lines[i]);
+        if (!line) { pending = []; continue; }
+
+        if (substr(line, 0, 1) === "#") {
+            let text = trim(substr(line, 1));
+            if (!text || match(text, /^[-=*\s]*$/)) { pending = []; continue; }
+            push(pending, text);
+            continue;
+        }
+
+        let tbl = match(line, /^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/);
+        if (tbl) {
+            let fullComment = join(" ", pending);
+            let typeM       = match(fullComment, /\[(\w+)\]/);
+            if (typeM && typeM[1] === "section") {
+                push(fields, {
+                    name:      tbl[1],
+                    type:      "section",
+                    "default": {},
+                    comment:   trim(replace(replace(fullComment, /\[\w+\]/g, ""), /\s+/g, " ")),
+                    options:   [],
+                });
+            }
+            pending = [];
+            continue;
+        }
+
+        let eqIdx = index(line, "=");
+        if (eqIdx < 0) { pending = []; continue; }
+        let key    = trim(substr(line, 0, eqIdx));
+        let rawVal = trim(substr(line, eqIdx + 1));
+        let fullComment = join(" ", pending);
+        let typeM       = match(fullComment, /\[(\w+)\]/);
+        let fieldType   = typeM ? typeM[1] : inferType(rawVal);
+        let options = [];
+        let optM    = match(fullComment, /选项[：:]\s*([^\n]+)/);
+        if (optM) {
+            let optStr = trim(optM[1]);
+            let raw    = index(optStr, ",") >= 0
+                ? split(optStr, ",") : split(optStr, " ");
+            for (let oi = 0; oi < length(raw); oi++) {
+                let v = trim(raw[oi]);
+                if (v) push(options, v);
+            }
+        }
+
+        push(fields, {
+            name:      key,
+            type:      fieldType,
+            "default": parseDefaultValue(rawVal, fieldType),
+            comment:   trim(replace(replace(fullComment, /\[\w+\]/g, ""), /\s+/g, " ")),
+            options:   options,
+        });
+        pending = [];
+    }
+    for (let i = 0; i < length(fields); i++) {
+        if (fields[i].name === "device_name" && fields[i]["default"] === "") {
+            fields[i]["default"] = getDeviceModel();
+            break;
+        }
+    }
+    return fields;
+}
+
+const METHODS = {
+    list_instances:       cmdListInstances,
+    list_configs:         cmdListConfigs,
+    read_config:          cmdReadConfig,
+    read_template:        cmdReadTemplate,
+    get_template_fields:  cmdGetTemplateFields,
+    save_config:          cmdSaveConfig,
+    delete_config:        cmdDeleteConfig,
+    start_instance:       (a) => doStart(a.name),
+    stop_instance:        (a) => doStop(a.name),
+    restart_instance:     (a) => doRestart(a.name),
+    get_instance_status:  (a) => { initPaths(); return instanceInfo(a.name); },
+    get_ctrl_info:        cmdGetCtrlInfo,
+    get_log:              cmdGetLog,
+    clear_log:            cmdClearLog,
+    get_system_info:      cmdGetSystemInfo,
+    check_binaries:       cmdCheckBinaries,
+    get_settings:         cmdGetSettings,
+    save_settings:        cmdSaveSettings,
+    get_upstream_version: cmdGetUpstreamVersion,
+    do_update:            cmdDoUpdate,
+    get_enabled:          cmdGetEnabled,
+    set_enabled:          cmdSetEnabled,
+    get_cpu_ticks:        cmdGetCpuTicks,
+};
+
+const SIGNATURES = {
+    list_instances:       {},
+    list_configs:         { filter: "String" },
+    read_config:          { name: "String", type: "String" },
+    read_template:        { type: "String" },
+    get_template_fields:  { type: "String" },
+    save_config:          { name: "String", type: "String", content: "String" },
+    delete_config:        { name: "String", type: "String" },
+    start_instance:       { name: "String" },
+    stop_instance:        { name: "String" },
+    restart_instance:     { name: "String" },
+    get_instance_status:  { name: "String" },
+    get_ctrl_info:        { name: "String", cmd: "String" },
+    get_log:              { name: "String", lines: "Integer" },
+    clear_log:            { name: "String" },
+    get_system_info:      {},
+    check_binaries:       {},
+    get_settings:         {},
+    save_settings:        {
+        bin_path: "String", config_path: "String", arch: "String",
+        mirror: "String", auto_update: "Boolean",
+        update_interval: "Integer", upx_compressed: "Boolean",
+    },
+    get_upstream_version: { project: "String", mirror: "String" },
+    do_update:            { project: "String", filename: "String", upx: "Boolean", mirror: "String" },
+    get_enabled:          { type: "String" },
+    set_enabled:          { type: "String", configs: "String" },
+    get_cpu_ticks:        { name: "String" },
+};
+
+let argv = ARGV;
+
+switch (argv[0]) {
+    case "list":
+        print(sprintf("%J", SIGNATURES), "\n");
+        break;
+
+    case "call": {
+        let method = argv[1];
+        let raw    = readfile("/dev/stdin") ?? "{}";
+        let input  = json(raw) ?? {};
+        let fn     = METHODS[method];
+        if (!fn) {
+            print(sprintf("%J", { error: "未知方法" }), "\n");
+        } else {
+            try {
+                let result = fn(input);
+                print(sprintf("%J", result), "\n");
+            } catch(e) {
+                print(sprintf("%J", { error: `${e}` }), "\n");
+            }
+        }
+        break;
+    }
+
+    default:
+        warn(`Usage: ${argv[0]} {list|call <method>}\n`);
+        exit(1);
+}

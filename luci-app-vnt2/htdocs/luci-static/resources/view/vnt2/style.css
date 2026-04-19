@@ -1,0 +1,261 @@
+/* VNT2 LuCI 应用样式 */
+
+.vnt2-toolbar {
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vnt2-empty,
+.vnt2-loading {
+    color: #888;
+    padding: 20px 0;
+    text-align: center;
+    font-style: italic;
+}
+
+.vnt2-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.vnt2-table thead th {
+    border-bottom: 2px solid #ddd;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.vnt2-table tbody td {
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.vnt2-table .vnt2-col-name {
+    font-weight: bold;
+}
+
+.vnt2-edit-view {
+    display: flex;
+    flex-direction: column;
+}
+
+.vnt2-edit-header {
+    padding: 10px 0 14px;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 16px;
+}
+
+.vnt2-breadcrumb {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.vnt2-breadcrumb-link {
+    color: #0066cc;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.vnt2-breadcrumb-link:hover {
+    color: #004499;
+}
+
+.vnt2-breadcrumb-sep {
+    color: #aaa;
+    margin: 0 4px;
+}
+
+.vnt2-edit-file-hint {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+}
+
+.vnt2-edit-body {
+    flex: 1;
+}
+
+.vnt2-edit-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 0 4px;
+    border-top: 1px solid #e0e0e0;
+    margin-top: 16px;
+}
+
+.vnt2-dyn-form {
+    width: 100%;
+}
+
+.vnt2-field-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f2f2f2;
+}
+
+.vnt2-field-row:last-child {
+    border-bottom: none;
+}
+
+.vnt2-field-label {
+    width: 240px;
+    flex-shrink: 0;
+    padding-top: 5px;
+    padding-right: 16px;
+}
+
+.vnt2-field-name {
+    font-weight: bold;
+    font-size: 13px;
+    font-family: monospace;
+    word-break: break-all;
+    color: #222;
+}
+
+.vnt2-required-star {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.vnt2-field-desc {
+    font-size: 11px;
+    color: #888;
+    margin-top: 3px;
+    line-height: 1.5;
+}
+
+.vnt2-field-input {
+    flex: 1;
+    min-width: 0;
+    padding-top: 3px;
+}
+
+.vnt2-input {
+    background-color: #ffffff !important;
+    color: #333333 !important;
+    border: 1px solid #cccccc !important;
+    border-radius: 3px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.vnt2-input:focus {
+    border-color: #0066cc !important;
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15) !important;
+}
+
+input.vnt2-input[type="text"],
+input.vnt2-input[type="number"] {
+    width: 100%;
+    max-width: 480px;
+}
+
+.vnt2-input-number {
+    max-width: 160px !important;
+}
+
+.vnt2-input-error {
+    border-color: #dc3545 !important;
+    background-color: #fff8f8 !important;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15) !important;
+}
+
+.vnt2-bool-wrap {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    padding-top: 3px;
+}
+
+.vnt2-checkbox {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.vnt2-bool-label {
+    margin-left: 8px;
+    font-size: 13px;
+    color: #555;
+}
+
+.vnt2-array-field,
+.vnt2-section-field {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vnt2-array-row,
+.vnt2-section-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.vnt2-array-row:last-child,
+.vnt2-section-row:last-child {
+    margin-bottom: 0;
+}
+
+.vnt2-array-item,
+.vnt2-section-item {
+    flex: 1;
+    max-width: 420px !important;
+}
+
+.vnt2-array-btn-add,
+.vnt2-array-btn-del {
+    padding: 4px 10px !important;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+    min-width: 32px !important;
+    flex-shrink: 0;
+}
+
+.vnt2-array-btn-add {
+    background: #e8f4e8 !important;
+    border-color: #82b882 !important;
+    color: #2d7a2d !important;
+}
+
+.vnt2-array-btn-add:hover {
+    background: #d0ecd0 !important;
+}
+
+.vnt2-array-btn-del {
+    background: #fde8e8 !important;
+    border-color: #e08080 !important;
+    color: #a02020 !important;
+}
+
+.vnt2-array-btn-del:hover {
+    background: #fad0d0 !important;
+}
+
+.vnt2-hint {
+    color: #888;
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+.vnt2-err-msg {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+#vnt2-log-content {
+    line-height: 1.5;
+}
