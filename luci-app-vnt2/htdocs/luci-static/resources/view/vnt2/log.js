@@ -10,7 +10,9 @@ function rpcDeclare(method, params) {
 var callListInstances = rpcDeclare('list_instances', []);
 var callGetLog        = rpcDeclare('get_log',        ['name','lines']);
 var callClearLog      = rpcDeclare('clear_log',      ['name']);
+
 var LINE_OPTIONS = [100, 200, 500, 1000];
+
 var MONTH_MAP = {
     Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
     Jul:'07', Aug:'08', Sep:'09', Oct:'10', Nov:'11', Dec:'12'
@@ -35,15 +37,13 @@ function scrollLog(toBottom) {
 function parseLogreadTime(raw) {
     raw = raw.trim();
     var pad = function(n) { return String(n).padStart(2, '0'); };
-    var m1 = raw.match(/^\w{3}\s+(\w{3})\s+(\d+)\s+([\d:]+)\s+(\d{4})$/);
+    var m1  = raw.match(/^\w{3}\s+(\w{3})\s+(\d+)\s+([\d:]+)\s+(\d{4})$/);
     if (m1)
-        return m1[4] + '-' + (MONTH_MAP[m1[1]]||'01') + '-'
-            + pad(m1[2]) + ' ' + m1[3];
+        return m1[4] + '-' + (MONTH_MAP[m1[1]]||'01') + '-' + pad(m1[2]) + ' ' + m1[3];
     var m2 = raw.match(/^(\w{3})\s+(\d+)\s+([\d:]+)$/);
     if (m2)
         return new Date().getFullYear() + '-' + (MONTH_MAP[m2[1]]||'01') + '-'
             + pad(m2[2]) + ' ' + m2[3];
-
     return raw;
 }
 
@@ -53,9 +53,19 @@ function getLineColor(line) {
     return '#d4d4d4';
 }
 
+function buildLogLine(timeStr, body) {
+    var span = E('span', { 'style':'display:block;line-height:1.6;' });
+    if (timeStr)
+        span.appendChild(E('span', { 'style':'color:#6a9153;margin-right:8px;' }, timeStr));
+    span.appendChild(E('span', { 'style':'color:' + getLineColor(body) + ';' }, body));
+    return span;
+}
+
 return view.extend({
+
     _pollHandle:     null,
     _instPollHandle: null,
+
     load: function() {
         return Promise.all([
             L.require('vnt2.common'),
@@ -68,8 +78,9 @@ return view.extend({
         self._ui      = data[0].VNT2UI;
         var instances = (data[1] && Array.isArray(data[1].instances))
             ? data[1].instances : [];
-        self._instances       = instances.filter(function(i) { return i.running; });
-        self._currentInstance = self._instances.length ? self._instances[0].name : null;
+        self._instances       = instances;
+        self._currentInstance = instances.length ? instances[0].name : null;
+
         var node = E('div', { 'class':'cbi-map' }, [
             E('h2', {}, 'VNT2 日志'),
             E('div', { 'class':'cbi-section' }, [
@@ -84,7 +95,7 @@ return view.extend({
                         'white-space:pre-wrap', 'word-break:break-all',
                         'margin-top:12px'
                     ].join(';')
-                }, self._currentInstance ? '加载中...' : '暂无运行中的实例')
+                }, self._currentInstance ? '加载中...' : '暂无实例')
             ])
         ]);
 
@@ -93,59 +104,24 @@ return view.extend({
         self._instPollHandle = window.setInterval(function() {
             self._refreshInstances();
         }, 5000);
+
         window.setTimeout(function() {
             var el = document.querySelector('.cbi-page-actions');
             if (el) el.style.display = 'none';
         }, 0);
+
         return node;
     },
 
-    _refreshInstances: function() {
-        var self = this;
-        callListInstances().then(function(r) {
-            var instances = (r && Array.isArray(r.instances))
-                ? r.instances.filter(function(i) { return i.running; })
-                : [];
-
-            self._instances = instances;
-            var selStillRunning = instances.some(function(i) {
-                return i.name === self._currentInstance;
-            });
-            if (!selStillRunning) {
-                self._currentInstance = instances.length ? instances[0].name : null;
-                self._stopAuto();
-            }
-            self._rebuildSelect(instances);
-        }).catch(function() {});
-    },
-
-    _rebuildSelect: function(instances) {
-        var self = this;
-        var sel  = document.getElementById('vnt2-inst-select');
-        if (!sel) return;
-        sel.innerHTML = '';
-        if (!instances.length) {
-            var opt      = document.createElement('option');
-            opt.value    = '';
-            opt.textContent = '暂无运行中实例';
-            sel.appendChild(opt);
-            var el = getLogEl();
-            if (el) el.textContent = '暂无运行中的实例';
-            return;
-        }
-
-        instances.forEach(function(inst) {
-            var opt         = document.createElement('option');
-            opt.value       = inst.name;
-            opt.textContent = inst.name + ' ('
-                + (inst.type === 'vnt' ? '客户端' : '服务端') + ')';
-            if (inst.name === self._currentInstance) opt.selected = true;
-            sel.appendChild(opt);
-        });
+    _instLabel: function(inst) {
+        var type   = inst.type === 'vnt' ? '客户端' : '服务端';
+        var status = inst.running ? '运行中' : '已停止';
+        return inst.name + ' (' + type + ' · ' + status + ')';
     },
 
     _renderToolbar: function() {
         var self = this;
+
         var instanceSelect = E('select', {
             'id':     'vnt2-inst-select',
             'class':  'cbi-input-select',
@@ -158,10 +134,9 @@ return view.extend({
             ? self._instances.map(function(inst) {
                 var a = { 'value':inst.name };
                 if (inst.name === self._currentInstance) a['selected'] = 'selected';
-                return E('option', a,
-                    inst.name + ' (' + (inst.type === 'vnt' ? '客户端' : '服务端') + ')');
+                return E('option', a, self._instLabel(inst));
               })
-            : [E('option', { 'value':'' }, '暂无运行中实例')]
+            : [E('option', { 'value':'' }, '暂无实例')]
         );
 
         var linesSelect = E('select', {
@@ -204,46 +179,84 @@ return view.extend({
         })));
     },
 
+    _refreshInstances: function() {
+        var self = this;
+        callListInstances().then(function(r) {
+            var instances = (r && Array.isArray(r.instances)) ? r.instances : [];
+            self._instances = instances;
+            var selExists = instances.some(function(i) {
+                return i.name === self._currentInstance;
+            });
+            if (!selExists)
+                self._currentInstance = instances.length ? instances[0].name : null;
+
+            self._rebuildSelect(instances);
+        }).catch(function() {});
+    },
+
+    _rebuildSelect: function(instances) {
+        var self = this;
+        var sel  = document.getElementById('vnt2-inst-select');
+        if (!sel) return;
+
+        sel.innerHTML = '';
+
+        if (!instances.length) {
+            var opt         = document.createElement('option');
+            opt.value       = '';
+            opt.textContent = '暂无实例';
+            sel.appendChild(opt);
+            var el = getLogEl();
+            if (el) el.textContent = '暂无实例';
+            return;
+        }
+
+        instances.forEach(function(inst) {
+            var opt         = document.createElement('option');
+            opt.value       = inst.name;
+            opt.textContent = self._instLabel(inst);
+            if (inst.name === self._currentInstance) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    },
+
     _formatLog: function(content) {
-       var el = getLogEl();
-       if (!el) return;
-       el.innerHTML = '';
-       var lines      = content.split('\n');
-       var hasContent = false;
-       lines.forEach(function(line) {
-           if (!line.trim()) return;
-           hasContent = true;
-           var timeStr = '';
-           var body    = line;
-           var m1 = line.match(
-               /^(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+\S+\s+\S+\s+(.*)$/
-           );
-           var m2 = !m1 && line.match(
-               /^(\w{3}\s+\d+\s+[\d:]+)\s+\S+\s+\S+\s+(.*)$/
-           );
-           if (m1)      { timeStr = parseLogreadTime(m1[1]); body = m1[2]; }
-           else if (m2) { timeStr = parseLogreadTime(m2[1]); body = m2[2]; }
-           body = body.replace(
-               /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\s*/,
-               ''
-           );
-           var color = getLineColor(body);
-           var span  = E('span', { 'style':'display:block;line-height:1.6;' });
-           if (timeStr)
-               span.appendChild(E('span', {
-                   'style': 'color:#6a9153;margin-right:8px;'
-               }, timeStr));
-           span.appendChild(E('span', {
-               'style': 'color:' + color + ';'
-           }, body || line));
-           el.appendChild(span);
-       });
-       if (!hasContent)
-           el.appendChild(E('span', {
-               'style': 'color:#888;font-style:italic;'
-           }, '（暂无日志，实例可能尚未产生输出）'));
-       el.scrollTop = el.scrollHeight;
-   },
+        var el = getLogEl();
+        if (!el) return;
+        el.innerHTML = '';
+
+        var lines      = content.split('\n');
+        var hasContent = false;
+
+        lines.forEach(function(line) {
+            if (!line.trim()) return;
+            hasContent = true;
+            var timeStr = '';
+            var body    = line;
+            var m1 = line.match(
+                /^(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+\S+\s+\S+\s+(.*)$/
+            );
+            var m2 = !m1 && line.match(
+                /^(\w{3}\s+\d+\s+[\d:]+)\s+\S+\s+\S+\s+(.*)$/
+            );
+
+            if (m1)      { timeStr = parseLogreadTime(m1[1]); body = m1[2]; }
+            else if (m2) { timeStr = parseLogreadTime(m2[1]); body = m2[2]; }
+            body = body.replace(
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\s*/,
+                ''
+            );
+
+            el.appendChild(buildLogLine(timeStr, body || line));
+        });
+
+        if (!hasContent)
+            el.appendChild(E('span', {
+                'style': 'color:#888;font-style:italic;'
+            }, '（暂无日志）'));
+
+        el.scrollTop = el.scrollHeight;
+    },
 
     _loadLog: function() {
         var self = this;
@@ -254,7 +267,18 @@ return view.extend({
         if (el) el.textContent = '加载中...';
 
         callGetLog(self._currentInstance, lines).then(function(r) {
-            self._formatLog((r && r.content) || '');
+            var content = (r && r.content) || '';
+            if (!content.trim()) {
+                var el2 = getLogEl();
+                if (el2) {
+                    el2.innerHTML = '';
+                    el2.appendChild(E('span', {
+                        'style': 'color:#888;font-style:italic;'
+                    }, '（暂无日志，实例可能尚未启动或未产生输出）'));
+                }
+                return;
+            }
+            self._formatLog(content);
         }).catch(function() {
             var el2 = getLogEl();
             if (el2) el2.textContent = '加载日志失败';

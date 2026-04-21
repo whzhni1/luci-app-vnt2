@@ -36,7 +36,14 @@ var LINKS = [
     ['https://github.com/whzhni1/luci-app-vnt2', 'Luci'  ],
 ];
 
+var ACTIONS = [
+    { id:'start',   label:'启动', needRunning:false, fn:callStartInstance   },
+    { id:'restart', label:'重启', needRunning:true,  fn:callRestartInstance },
+    { id:'stop',    label:'停止', needRunning:true,  fn:callStopInstance    },
+];
+
 var _lastTicks = {};
+
 function runningColor(running) {
     return running ? '#28a745' : '#dc3545';
 }
@@ -79,7 +86,6 @@ function formatUptime(seconds) {
 }
 
 return view.extend({
-
     load: function() {
         return Promise.all([
             L.require('vnt2.common'),
@@ -108,6 +114,7 @@ return view.extend({
         var firstVnt = instances.filter(function(i) { return i.type === 'vnt'; })[0];
         self._selectedInstance = firstVnt ? firstVnt.name : null;
         self._activeCtrlTab    = 'info';
+
         var linkNodes = [E('span', {}, '💡 '), E('b', {}, 'VNT'),
             E('span', {}, ' - 简便高效的异地组网工具 | ')];
         LINKS.forEach(function(lk, i) {
@@ -180,7 +187,6 @@ return view.extend({
                 '暂无实例，请先在客户端或服务端配置页新建实例。');
         var thStyle = 'padding:8px 12px;text-align:center;';
         var heads   = ['实例名称','实例类型','运行时间','PID','CPU／RAM','快捷操作','Web UI'];
-
         return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;' },
             E('table', {
                 'class': 'vnt2-table',
@@ -214,31 +220,28 @@ return view.extend({
             E('td', { 'id':'vnt2-res-'     + inst.name, 'style':tdStyle },
                 running ? '-／' + inst.mem + 'M' : '-'),
             E('td', { 'id':'vnt2-actions-' + inst.name, 'style':tdStyle },
-                self._buildActionDropdown(inst)),
+                self._buildActionBtns(inst)),
             E('td', { 'id':'vnt2-web-'     + inst.name, 'style':tdStyle },
                 self._buildWebBtn(inst, hasWeb))
         ]);
     },
 
-    _buildActionDropdown: function(inst) {
+    _buildActionBtns: function(inst) {
         var self    = this;
-        var name    = inst.name;
         var running = !!inst.running;
-        return E('select', {
-            'class':  'cbi-input-select',
-            'style':  'width:auto;',
-            'change': function(ev) {
-                var action = ev.target.value;
-                if (!action) return;
-                ev.target.value = '';
-                self._doAction(action, name);
-            }
-        }, [
-            E('option', { 'value':'' }, '— 操作 —'),
-            E('option', { 'value':'start',   'disabled':running  ? 'disabled' : null }, '启动'),
-            E('option', { 'value':'restart', 'disabled':!running ? 'disabled' : null }, '重启'),
-            E('option', { 'value':'stop',    'disabled':!running ? 'disabled' : null }, '停止')
-        ]);
+        var wrap    = E('div', { 'style':'display:flex;gap:4px;justify-content:center;' });
+        ACTIONS.forEach(function(act) {
+            var disabled = running !== act.needRunning;
+            wrap.appendChild(E('button', {
+                'class':    'btn cbi-button' + (disabled ? '' : '-action'),
+                'disabled': disabled ? 'disabled' : null,
+                'style':    'padding:2px 8px;font-size:12px;',
+                'click':    disabled ? null : function() {
+                    self._doAction(act, inst.name);
+                }
+            }, act.label));
+        });
+        return wrap;
     },
 
     _buildWebBtn: function(inst, hasWeb) {
@@ -254,21 +257,14 @@ return view.extend({
         return E('span', { 'style':'color:#ccc;' }, '-');
     },
 
-    _doAction: function(action, name) {
-        var self   = this;
-        var labels = { start:'启动', stop:'停止', restart:'重启' };
-        var fns    = {
-            start:   callStartInstance,
-            stop:    callStopInstance,
-            restart: callRestartInstance
-        };
-        if (!fns[action]) return;
-        fns[action](name).then(function(result) {
-            var ok = action === 'stop'
+    _doAction: function(act, name) {
+        var self = this;
+        act.fn(name).then(function(result) {
+            var ok = act.id === 'stop'
                 ? result && (result.result === 'ok' || result.result === 'not_running')
                 : result && result.result === 'ok';
             self._ui.notify(
-                '实例 "' + name + '" ' + labels[action] +
+                '实例 "' + name + '" ' + act.label +
                 (ok ? ' 成功' : ' 失败：' + ((result && result.msg) || '未知错误')),
                 ok ? 'success' : 'error'
             );
@@ -281,77 +277,75 @@ return view.extend({
     },
 
     _renderCtrlPanel: function(instances) {
-    var self = this;
-    var vntInsts = instances.filter(function(i) {
-        return i.type === 'vnt' && i.running;
-    });
+        var self = this;
+        var vntInsts = instances.filter(function(i) {
+            return i.type === 'vnt' && i.running;
+        });
+        if (!vntInsts.length)
+            return E('p', { 'style':'color:#888;' }, '暂无运行中的客户端实例。');
+        var selValid = vntInsts.some(function(i) { return i.name === self._selectedInstance; });
+        if (!selValid) self._selectedInstance = vntInsts[0].name;
 
-    if (!vntInsts.length)
-        return E('p', { 'style':'color:#888;' }, '暂无运行中的客户端实例。');
-    var selValid = vntInsts.some(function(i) {
-        return i.name === self._selectedInstance;
-    });
-    if (!selValid) self._selectedInstance = vntInsts[0].name;
-    var instSelect = E('select', {
-        'class':  'cbi-input-select',
-        'style':  'width:auto;',
-        'change': function(ev) {
-            self._selectedInstance = ev.target.value;
-            self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
-        }
-    }, vntInsts.map(function(inst) {
-        var a = { 'value':inst.name };
-        if (inst.name === self._selectedInstance) a['selected'] = 'selected';
-        return E('option', a, inst.name);
-    }));
+        var instSelect = E('select', {
+            'class':  'cbi-input-select',
+            'style':  'width:auto;',
+            'change': function(ev) {
+                self._selectedInstance = ev.target.value;
+                self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
+            }
+        }, vntInsts.map(function(inst) {
+            var a = { 'value':inst.name };
+            if (inst.name === self._selectedInstance) a['selected'] = 'selected';
+            return E('option', a, inst.name);
+        }));
 
-    var tabHeader = E('div', {
-        'style': 'display:flex;border-bottom:2px solid #ddd;margin-top:12px;'
-    }, CTRL_TABS.map(function(t) {
-        var active = t.id === self._activeCtrlTab;
-        return E('div', {
-            'id':    'vnt2-ctrl-tabl-' + t.id,
-            'style': [
-                'padding:6px 18px', 'cursor:pointer', 'font-size:13px', 'margin-bottom:-2px',
-                'border-bottom:' + (active ? '2px solid #3498db' : '2px solid transparent'),
-                'color:'         + (active ? '#3498db' : '#666')
-            ].join(';'),
-            'click': function() { self._switchCtrlTab(t.id); }
-        }, t.label);
-    }));
+        var tabHeader = E('div', {
+            'style': 'display:flex;border-bottom:2px solid #ddd;margin-top:12px;'
+        }, CTRL_TABS.map(function(t) {
+            var active = t.id === self._activeCtrlTab;
+            return E('div', {
+                'id':    'vnt2-ctrl-tabl-' + t.id,
+                'style': [
+                    'padding:6px 18px', 'cursor:pointer', 'font-size:13px', 'margin-bottom:-2px',
+                    'border-bottom:' + (active ? '2px solid #3498db' : '2px solid transparent'),
+                    'color:'         + (active ? '#3498db' : '#666')
+                ].join(';'),
+                'click': function() { self._switchCtrlTab(t.id); }
+            }, t.label);
+        }));
 
-    var tabBody = E('div', {}, CTRL_TABS.map(function(t) {
-        return E('div', {
-            'id':    'vnt2-ctrl-tab-' + t.id,
-            'style': 'display:' + (t.id === self._activeCtrlTab ? 'block' : 'none')
-                   + ';padding:12px 0;'
-        }, E('p', { 'style':'color:#888;font-style:italic;' }, '加载中...'));
-    }));
+        var tabBody = E('div', {}, CTRL_TABS.map(function(t) {
+            return E('div', {
+                'id':    'vnt2-ctrl-tab-' + t.id,
+                'style': 'display:' + (t.id === self._activeCtrlTab ? 'block' : 'none')
+                       + ';padding:12px 0;'
+            }, E('p', { 'style':'color:#888;font-style:italic;' }, '加载中...'));
+        }));
 
-    return E('div', {}, [
-        E('div', { 'style':'display:flex;align-items:center;gap:8px;' }, [
-            E('label', {}, '选择实例：'),
-            instSelect,
-            E('button', {
-                'class': 'btn cbi-button-action',
-                'click': function() {
-                    if (self._selectedInstance)
-                        self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
-                }
-            }, '刷新')
-        ]),
-        tabHeader,
-        tabBody
-    ]);
-},
+        return E('div', {}, [
+            E('div', { 'style':'display:flex;align-items:center;gap:8px;' }, [
+                E('label', {}, '选择实例：'),
+                instSelect,
+                E('button', {
+                    'class': 'btn cbi-button-action',
+                    'click': function() {
+                        if (self._selectedInstance)
+                            self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
+                    }
+                }, '刷新')
+            ]),
+            tabHeader,
+            tabBody
+        ]);
+    },
 
     _switchCtrlTab: function(tid) {
         var self = this;
         self._activeCtrlTab = tid;
         CTRL_TABS.forEach(function(t) {
-            var active  = t.id === tid;
-            var tabEl   = document.getElementById('vnt2-ctrl-tabl-' + t.id);
-            var bodyEl  = document.getElementById('vnt2-ctrl-tab-'  + t.id);
+            var active = t.id === tid;
+            var tabEl  = document.getElementById('vnt2-ctrl-tabl-' + t.id);
+            var bodyEl = document.getElementById('vnt2-ctrl-tab-'  + t.id);
             if (tabEl) {
                 tabEl.style.borderBottom = active ? '2px solid #3498db' : '2px solid transparent';
                 tabEl.style.color        = active ? '#3498db' : '#666';
@@ -398,7 +392,6 @@ return view.extend({
             var els = getInstEls(inst.name);
             if (els.uptime) els.uptime.textContent = running ? formatUptime(inst.uptime) : '-';
             if (els.pid)    els.pid.textContent    = inst.pid || '-';
-
             if (els.res) {
                 if (!running) {
                     els.res.textContent = '-';
@@ -412,10 +405,9 @@ return view.extend({
                     });
                 }
             }
-
             if (els.actions) {
                 els.actions.innerHTML = '';
-                els.actions.appendChild(self._buildActionDropdown(inst));
+                els.actions.appendChild(self._buildActionBtns(inst));
             }
             if (els.web) {
                 els.web.innerHTML = '';

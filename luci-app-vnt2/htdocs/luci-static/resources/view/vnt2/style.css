@@ -1,5 +1,8 @@
-/* VNT2 LuCI 应用样式 */
+/* ============================================================
+   VNT2 LuCI 应用样式
+   ============================================================ */
 
+/* ── 工具栏 ── */
 .vnt2-toolbar {
     margin-bottom: 14px;
     display: flex;
@@ -7,6 +10,7 @@
     gap: 8px;
 }
 
+/* ── 空状态 / 加载中 ── */
 .vnt2-empty,
 .vnt2-loading {
     color: #888;
@@ -15,6 +19,7 @@
     font-style: italic;
 }
 
+/* ── 通用数据表格 ── */
 .vnt2-table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -35,6 +40,7 @@
     font-weight: bold;
 }
 
+/* ── 编辑视图布局 ── */
 .vnt2-edit-view {
     display: flex;
     flex-direction: column;
@@ -85,6 +91,7 @@
     margin-top: 16px;
 }
 
+/* ── 动态表单字段行 ── */
 .vnt2-dyn-form {
     width: 100%;
 }
@@ -133,6 +140,7 @@
     padding-top: 3px;
 }
 
+/* ── 统一输入框样式 ── */
 .vnt2-input {
     background-color: #ffffff !important;
     color: #333333 !important;
@@ -166,6 +174,7 @@ input.vnt2-input[type="number"] {
     box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15) !important;
 }
 
+/* ── bool 字段 ── */
 .vnt2-bool-wrap {
     display: inline-flex;
     align-items: center;
@@ -188,6 +197,7 @@ input.vnt2-input[type="number"] {
     color: #555;
 }
 
+/* ── array / section 多行输入框（共用布局） ── */
 .vnt2-array-field,
 .vnt2-section-field {
     width: 100%;
@@ -209,6 +219,7 @@ input.vnt2-input[type="number"] {
     margin-bottom: 0;
 }
 
+/* ★ array-item 和 section-item 共用同一规则 */
 .vnt2-array-item,
 .vnt2-section-item {
     flex: 1;
@@ -244,6 +255,7 @@ input.vnt2-input[type="number"] {
     background: #fad0d0 !important;
 }
 
+/* ── 提示文字 ── */
 .vnt2-hint {
     color: #888;
     font-size: 12px;
@@ -256,6 +268,7 @@ input.vnt2-input[type="number"] {
     margin-top: 4px;
 }
 
+/* ── 日志区域 ── */
 #vnt2-log-content {
     line-height: 1.5;
 }

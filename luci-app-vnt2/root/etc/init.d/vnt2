@@ -37,6 +37,7 @@ get_uci_field() {
     uci -q show vnt2 2>/dev/null \
         | grep "^vnt2\.[^.]*=${sectype}$" \
         | cut -d. -f2 | cut -d= -f1 > "$tmp"
+
     while read -r sid; do
         n=$(uci -q get "vnt2.${sid}.name" 2>/dev/null)
         if [ "$n" = "$name" ]; then
@@ -95,11 +96,20 @@ start_instance() {
     procd_open_instance "$name"
     procd_set_param command "$bin"
     local IFS='|'
+    # shellcheck disable=SC2086
     procd_append_param command $args
     unset IFS
+
+    # respawn: 崩溃自动重启
+    # 格式: threshold retry timeout
+    # threshold=3600: 1小时内崩溃超过retry次才放弃
+    # retry=5: 最多重试5次
+    # timeout=5: 重启等待5秒
     procd_set_param respawn 3600 5 5
     procd_set_param stdout 1
     procd_set_param stderr 1
+    # 进程环境变量（可选）
+    # procd_set_param env KEY=VALUE
     procd_set_param pidfile "/var/run/vnt2_${name}.pid"
     procd_close_instance
     echo "[$name] 实例已注册"
@@ -109,11 +119,13 @@ each_enabled_instance() {
     local callback="$1"
     local tmp sid name enabled type
     tmp=$(mktemp)
+
     for type in vnt vnts; do
         uci -q show vnt2 2>/dev/null \
             | grep "^vnt2\.[^.]*=${type}$" \
             | cut -d. -f2 | cut -d= -f1 >> "$tmp"
     done
+
     while read -r sid; do
         name=$(uci    -q get "vnt2.${sid}.name"    2>/dev/null)
         enabled=$(uci -q get "vnt2.${sid}.enabled" 2>/dev/null)
@@ -122,6 +134,7 @@ each_enabled_instance() {
         [ "$enabled" != "1" ] && continue
         "$callback" "$name" "$type"
     done < "$tmp"
+
     rm -f "$tmp"
 }
 
@@ -129,8 +142,4 @@ start_service() {
     init_paths
     echo "VNT2: 启动所有已启用实例..."
     each_enabled_instance start_instance
-}
-
-service_triggers() {
-    procd_add_reload_trigger "vnt2"
 }

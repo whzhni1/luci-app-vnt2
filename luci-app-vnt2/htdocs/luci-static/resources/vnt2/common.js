@@ -3,16 +3,19 @@
 // /www/luci-static/resources/vnt2/common.js
 
 var RE_TOML_TABLE = /^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/;
+
 function escapeStr(s) {
     return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 var VNT2ConfigParser = {
+
     parseTemplate: function(content) {
         if (!content || typeof content !== 'string') return [];
         var lines          = content.split('\n');
         var fields         = [];
         var pendingComment = [];
+
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim();
             if (!line) { pendingComment = []; continue; }
@@ -42,11 +45,13 @@ var VNT2ConfigParser = {
 
             var eqIdx = line.indexOf('=');
             if (eqIdx < 0) { pendingComment = []; continue; }
+
             var key         = line.substring(0, eqIdx).trim();
             var rawVal      = line.substring(eqIdx + 1).trim();
             var fullComment = pendingComment.join(' ');
             var typeMatch   = fullComment.match(/\[(\w+)\]/);
             var fieldType   = typeMatch ? typeMatch[1] : this._inferType(rawVal);
+
             var options  = [];
             var optMatch = fullComment.match(/选项[：:]\s*([^\n]+)/);
             if (optMatch) {
@@ -72,9 +77,11 @@ var VNT2ConfigParser = {
         if (!content || typeof content !== 'string') return {};
         var values         = {};
         var currentSection = null;
+
         content.split('\n').forEach(function(line) {
             var trimmed = line.trim();
             if (!trimmed || trimmed.charAt(0) === '#') return;
+
             var tblMatch = trimmed.match(RE_TOML_TABLE);
             if (tblMatch) {
                 currentSection = tblMatch[1];
@@ -86,6 +93,7 @@ var VNT2ConfigParser = {
             if (eqIdx < 0) return;
             var key = trimmed.substring(0, eqIdx).trim();
             var val = trimmed.substring(eqIdx + 1).trim();
+
             if (currentSection) {
                 values[currentSection][key] = val.replace(/^["']|["']$/g, '');
             } else {
@@ -97,6 +105,7 @@ var VNT2ConfigParser = {
 
     serializeToToml: function(fields, values, templateContent) {
         if (!templateContent) return '';
+
         var typeMap    = {};
         var sectionSet = {};
         fields.forEach(function(f) {
@@ -108,13 +117,16 @@ var VNT2ConfigParser = {
         var tplLines    = templateContent.split('\n');
         var inSection   = null;
         var sectionDone = {};
+
         for (var i = 0; i < tplLines.length; i++) {
             var line    = tplLines[i];
             var trimmed = line.trim();
+
             var tblMatch = trimmed.match(RE_TOML_TABLE);
             if (tblMatch) {
                 var tbl   = tblMatch[1];
                 inSection = sectionSet[tbl] ? tbl : null;
+
                 if (sectionSet[tbl] && !sectionDone[tbl]) {
                     resultLines.push('');
                     resultLines.push('[' + tbl + ']');
@@ -216,6 +228,7 @@ var VNT2ConfigParser = {
 };
 
 var VNT2UI = {
+
     notify: function(msg, type) {
         var bg = { success:'#28a745', error:'#dc3545', info:'#17a2b8' }[type] || '#17a2b8';
         var el = E('div', {

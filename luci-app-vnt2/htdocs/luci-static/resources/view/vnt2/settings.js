@@ -12,6 +12,7 @@ var callGetSystemInfo      = rpcDeclare('get_system_info',      []);
 var callCheckBinaries      = rpcDeclare('check_binaries',       []);
 var callGetUpstreamVersion = rpcDeclare('get_upstream_version', ['project','mirror']);
 var callDoUpdate           = rpcDeclare('do_update',            ['project','filename','upx','mirror']);
+var callRebuildFirewall    = rpcDeclare('rebuild_firewall',     []);
 
 var SETTING_DEFS = [
     ['bin_path',        '/usr/bin'        ],
@@ -21,6 +22,11 @@ var SETTING_DEFS = [
     ['auto_update',     '0'               ],
     ['update_interval', '7'               ],
     ['upx_compressed',  '0'               ],
+    ['fw_vnt_to_lan',   '1'               ],
+    ['fw_lan_to_vnt',   '1'               ],
+    ['fw_vnt_to_wan',   '0'               ],
+    ['fw_wan_to_vnt',   '0'               ],
+    ['fw_vnts_web',     '0'               ],
 ];
 
 var MIRROR_OPTIONS = [
@@ -36,6 +42,14 @@ var COMPONENTS = [
     { name:'vnts2',     binKey:'vnts2',     versionKey:'vnts_version' },
 ];
 
+var FW_OPTIONS = [
+    { key:'fw_vnt_to_lan', label:'VNT → LAN', desc:'允许虚拟网络访问本地局域网' },
+    { key:'fw_lan_to_vnt', label:'LAN → VNT', desc:'允许本地局域网访问虚拟网络' },
+    { key:'fw_vnt_to_wan', label:'VNT → WAN', desc:'允许虚拟网络访问外网'    },
+    { key:'fw_wan_to_vnt', label:'WAN → VNT', desc:'允许外网访问虚拟网络'    },
+    { key:'fw_vnts_web',   label:'VNTS Web 外网访问', desc:'需配置 web_bind' },
+];
+
 function buildMirrorSelect(id, currentVal, style) {
     return E('select', {
         'class': 'cbi-input-select',
@@ -49,11 +63,11 @@ function buildMirrorSelect(id, currentVal, style) {
 }
 
 function getUpdEls(bid) {
-    var ids = ['status','selects','tag','file','count','mirror','mirror-row','log','log-content','btn'];
     var els = {};
-    ids.forEach(function(k) {
-        els[k.replace('-','_')] = document.getElementById(bid + '-' + k);
-    });
+    ['status','selects','tag','file','count','mirror','mirror-row','log','log-content','btn']
+        .forEach(function(k) {
+            els[k.replace('-','_')] = document.getElementById(bid + '-' + k);
+        });
     return els;
 }
 
@@ -63,11 +77,12 @@ function showMirrorRow(el, show) {
 
 function setStatus(el, text, color) {
     if (!el) return;
-    el.textContent  = text;
-    el.style.color  = color || '#888';
+    el.textContent = text;
+    el.style.color = color || '#888';
 }
 
 return view.extend({
+
     load: function() {
         return Promise.all([
             L.require('vnt2.common'),
@@ -82,10 +97,11 @@ return view.extend({
         self._ui       = data[0].VNT2UI;
         self._sysinfo  = data[2] || {};
         self._binaries = data[3] || {};
-        self._s = {};
+        self._s        = {};
         SETTING_DEFS.forEach(function(def) {
             self._s[def[0]] = uci.get('vnt2','global',def[0]) || def[1];
         });
+
         return E('div', { 'class':'cbi-map' }, [
             E('h2', {}, 'VNT2 设置与更新'),
             self._buildTabContainer([
@@ -95,9 +111,16 @@ return view.extend({
         ]);
     },
 
-    handleSave:      function() { return uci.save(); },
-    handleSaveApply: function() { return uci.save().then(function() { ui.changes.apply(); }); },
-    handleReset:     function() { return uci.load('vnt2'); },
+    handleSave: function() { return uci.save(); },
+    handleSaveApply: function() {
+    return uci.save().then(function() {
+        return ui.changes.apply();
+    }).then(function() {
+        return callRebuildFirewall();
+    });
+},
+    handleReset: function() { return uci.load('vnt2'); },
+
     _buildTabContainer: function(tabs) {
         var self   = this;
         var header = E('div', { 'style':'display:flex;border-bottom:2px solid #ddd;margin-bottom:20px;' });
@@ -136,14 +159,15 @@ return view.extend({
     },
 
     _buildSettingsTab: function() {
-        var self = this, s = self._s, ui = self._ui;
-        function buildCheck(id, checked, uciKey) {
+        var self = this, s = self._s, vui = self._ui;
+
+        function buildCheck(id, val, uciKey) {
             var cb = E('input', { 'type':'checkbox', 'id':id,
                 'change': function() {
                     uci.set('vnt2','global', uciKey, this.checked ? '1' : '0');
                 }
             });
-            if (checked === '1') cb.setAttribute('checked','checked');
+            if (val === '1') cb.setAttribute('checked','checked');
             return cb;
         }
 
@@ -154,40 +178,53 @@ return view.extend({
                 'change': function() { uci.set('vnt2','global', uciKey, this.value.trim()); }
             });
         }
-        var autoCheck = buildCheck('s-auto-update', s.auto_update,    'auto_update');
-        var upxCheck  = buildCheck('s-upx',         s.upx_compressed, 'upx_compressed');
+
+        function buildCheckRow(opt) {
+            return vui.buildFormRow(opt.label,
+                E('label', { 'style':'cursor:pointer;user-select:none;' }, [
+                    buildCheck('s-' + opt.key, s[opt.key], opt.key),
+                    E('span', { 'style':'margin-left:6px;' }, '启用')
+                ]), opt.desc || '');
+        }
+
         var mirrorSel = buildMirrorSelect('s-mirror', s.mirror);
         mirrorSel.addEventListener('change', function() {
             uci.set('vnt2','global','mirror', this.value);
         });
 
-        return E('div', { 'class':'cbi-section' }, [
-            E('h3', {}, '基本设置'),
-            ui.buildFormRow('二进制程序路径',
-                buildText('s-bin-path', s.bin_path, 'bin_path'),
-                '程序文件所在目录，默认 /usr/bin'),
-            ui.buildFormRow('配置文件路径',
-                buildText('s-config-path', s.config_path, 'config_path'),
-                '配置文件存储目录，默认 /etc/vnt2_config'),
-            ui.buildFormRow('设备架构',
-                buildText('s-arch', s.arch || self._sysinfo.arch || '', 'arch', 'width:200px;'),
-                '当前检测：' + (self._sysinfo.arch || '未知')),
-            ui.buildFormRow('下载镜像源', mirrorSel, '下载失败时切换其他镜像源重试'),
-            ui.buildFormRow('自动更新',
-                E('label', { 'style':'cursor:pointer;user-select:none;' }, [
-                    autoCheck,
-                    E('span', { 'style':'margin-left:6px;' }, '启用自动更新')
-                ]), '定期自动检查并更新程序'),
-            ui.buildFormRow('更新间隔（天）',
-                E('input', { 'type':'number', 'class':'cbi-input-text', 'id':'s-interval',
-                    'value':s.update_interval, 'min':'1', 'max':'365', 'style':'width:80px;',
-                    'change':function() { uci.set('vnt2','global','update_interval',this.value||'7'); }
-                }), '自动检查更新的间隔天数'),
-            ui.buildFormRow('UPX 压缩',
-                E('label', { 'style':'cursor:pointer;user-select:none;' }, [
-                    upxCheck,
-                    E('span', { 'style':'margin-left:6px;' }, '安装后使用 UPX 压缩（未安装 upx 将自动安装）')
-                ]), '可显著减小程序文件体积')
+        return E('div', {}, [
+            E('div', { 'class':'cbi-section' }, [
+                E('h3', {}, '基本设置'),
+                vui.buildFormRow('二进制程序路径',
+                    buildText('s-bin-path', s.bin_path, 'bin_path'),
+                    '程序文件所在目录，默认 /usr/bin'),
+                vui.buildFormRow('配置文件路径',
+                    buildText('s-config-path', s.config_path, 'config_path'),
+                    '配置文件存储目录，默认 /etc/vnt2_config'),
+                vui.buildFormRow('设备架构',
+                    buildText('s-arch', s.arch || self._sysinfo.arch || '', 'arch', 'width:200px;'),
+                    '当前检测：' + (self._sysinfo.arch || '未知')),
+                vui.buildFormRow('下载镜像源', mirrorSel, '下载失败时切换其他镜像源重试'),
+                vui.buildFormRow('自动更新',
+                    E('label', { 'style':'cursor:pointer;user-select:none;' }, [
+                        buildCheck('s-auto-update', s.auto_update, 'auto_update'),
+                        E('span', { 'style':'margin-left:6px;' }, '启用自动更新')
+                    ]), '定期自动检查并更新程序'),
+                vui.buildFormRow('更新间隔（天）',
+                    E('input', { 'type':'number', 'class':'cbi-input-text', 'id':'s-interval',
+                        'value':s.update_interval, 'min':'1', 'max':'365', 'style':'width:80px;',
+                        'change':function() { uci.set('vnt2','global','update_interval',this.value||'7'); }
+                    }), '自动检查更新的间隔天数'),
+                vui.buildFormRow('UPX 压缩',
+                    E('label', { 'style':'cursor:pointer;user-select:none;' }, [
+                        buildCheck('s-upx', s.upx_compressed, 'upx_compressed'),
+                        E('span', { 'style':'margin-left:6px;' }, '安装后使用 UPX 压缩')
+                    ]), '可显著减小程序文件体积')
+            ]),
+            E('div', { 'class':'cbi-section' }, [
+                E('h3', {}, '防火墙转发'),
+                E('div', {}, FW_OPTIONS.map(buildCheckRow))
+            ])
         ]);
     },
 
@@ -195,7 +232,7 @@ return view.extend({
         var self = this, sys = self._sysinfo, bins = self._binaries;
         var thStyle = 'padding:8px 12px;text-align:center;';
         var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;';
-        var heads   = ['组件','版本','状态'];
+
         return E('div', { 'class':'cbi-section' }, [
             E('h3', {}, '当前版本信息'),
             E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;margin-bottom:20px;' },
@@ -208,17 +245,19 @@ return view.extend({
                     ].join(';')
                 }, [
                     E('thead', {}, E('tr', {},
-                        heads.map(function(h) { return E('th', { 'style':thStyle }, h); })
+                        ['组件','版本','状态'].map(function(h) {
+                            return E('th', { 'style':thStyle }, h);
+                        })
                     )),
                     E('tbody', {}, COMPONENTS.map(function(comp) {
                         var installed   = !!bins[comp.binKey];
                         var color       = installed ? '#28a745' : '#dc3545';
-                        var statusStyle = tdStyle + 'color:' + color + ';font-weight:bold;';
                         var version     = installed ? (sys[comp.versionKey] || '未知') : '未安装';
                         return E('tr', {}, [
-                            E('td', { 'style':tdStyle },      comp.name),
-                            E('td', { 'style':tdStyle },      version),
-                            E('td', { 'style':statusStyle },  installed ? '✓ 已安装' : '✗ 未安装')
+                            E('td', { 'style':tdStyle }, comp.name),
+                            E('td', { 'style':tdStyle }, version),
+                            E('td', { 'style':tdStyle + 'color:' + color + ';font-weight:bold;' },
+                                installed ? '✓ 已安装' : '✗ 未安装')
                         ]);
                     }))
                 ])
@@ -263,7 +302,6 @@ return view.extend({
                     ])
                 ])
             ]),
-
             E('div', { 'id':bid+'-log', 'style':'display:none;margin-top:8px;' }, [
                 E('pre', { 'id':bid+'-log-content',
                     'style': [
@@ -280,8 +318,10 @@ return view.extend({
         var self   = this;
         var els    = getUpdEls(bid);
         var mirror = (els.mirror || {}).value || self._s.mirror || 'github';
+
         setStatus(els.status, '检查中...', '#888');
         showMirrorRow(els.mirror_row, false);
+
         callGetUpstreamVersion(project, mirror).then(function(info) {
             var releases = (info && Array.isArray(info.releases)) ? info.releases : [];
             if (!releases.length) {
@@ -289,9 +329,11 @@ return view.extend({
                 showMirrorRow(els.mirror_row, true);
                 return;
             }
+
             setStatus(els.status, '', '#888');
             showMirrorRow(els.mirror_row, false);
             if (els.count) els.count.textContent = '共 ' + releases.length + ' 个版本';
+
             var tagSel  = els.tag;
             var fileSel = els.file;
             tagSel.innerHTML = '';
@@ -324,6 +366,7 @@ return view.extend({
             tagSel.onchange = updateFiles;
             updateFiles();
             if (els.selects) els.selects.style.display = 'block';
+
         }).catch(function() {
             setStatus(els.status, '✗ 检查失败，请切换镜像源重试', '#dc3545');
             showMirrorRow(els.mirror_row, true);
@@ -335,11 +378,14 @@ return view.extend({
         var els   = getUpdEls(bid);
         var fname = els.file ? els.file.value : '';
         if (!fname) { self._ui.notify('请选择文件', 'error'); return; }
+
         var mirror = (els.mirror || {}).value || self._s.mirror || 'github';
         var upx    = !!((document.getElementById('s-upx') || {}).checked);
+
         if (els.log)         els.log.style.display       = 'block';
         if (els.log_content) els.log_content.textContent = '正在下载 ' + fname + '...\n';
         if (els.btn)         els.btn.disabled             = true;
+
         callDoUpdate(project, fname, upx, mirror).then(function(r) {
             if (els.btn) els.btn.disabled = false;
             var ok = r && r.result === 'ok';
