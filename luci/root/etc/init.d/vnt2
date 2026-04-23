@@ -1,0 +1,145 @@
+#!/bin/sh /etc/rc.common
+# /etc/init.d/vnt2
+
+START=99
+STOP=10
+USE_PROCD=1
+
+BIN_PATH="/usr/bin"
+CONFIG_PATH="/etc/vnt2_config"
+LOG_DIR="/tmp/vnt2_log"
+
+init_paths() {
+    local v
+    v=$(uci -q get vnt2.global.bin_path)
+    [ -n "$v" ] && BIN_PATH="$v"
+    v=$(uci -q get vnt2.global.config_path)
+    [ -n "$v" ] && CONFIG_PATH="$v"
+    mkdir -p "$CONFIG_PATH" "$LOG_DIR"
+}
+
+read_field() {
+    grep -m1 "^${2}[[:space:]]*=" "$1" 2>/dev/null \
+        | sed 's/^[^=]*=[[:space:]]*//' \
+        | sed 's/^["'"'"']//;s/["'"'"']$//' \
+        | tr -d '\r\n'
+}
+
+get_type() {
+    [ -f "${CONFIG_PATH}/${1}.vnt"  ] && printf 'vnt'  && return
+    [ -f "${CONFIG_PATH}/${1}.vnts" ] && printf 'vnts' && return
+}
+
+get_uci_field() {
+    local name="$1" sectype="$2" field="$3"
+    local tmp sid n result
+    tmp=$(mktemp)
+    uci -q show vnt2 2>/dev/null \
+        | grep "^vnt2\.[^.]*=${sectype}$" \
+        | cut -d. -f2 | cut -d= -f1 > "$tmp"
+
+    while read -r sid; do
+        n=$(uci -q get "vnt2.${sid}.name" 2>/dev/null)
+        if [ "$n" = "$name" ]; then
+            result=$(uci -q get "vnt2.${sid}.${field}" 2>/dev/null)
+            break
+        fi
+    done < "$tmp"
+    rm -f "$tmp"
+    printf '%s' "$result"
+}
+
+get_start_bin_args() {
+    local name="$1" type="$2" conf="$3"
+    local method wa
+    method=$(get_uci_field "$name" "$type" "start_method")
+    method="${method:-vnt2_cli}"
+    if [ "$type" = "vnt" ]; then
+        case "$method" in
+            vnt2_web)
+                wa=$(read_field "$conf" "web_addr")
+                # 输出格式: BIN|ARG1|ARG2|...
+                printf '%s|--addr|%s|--conf|%s' \
+                    "${BIN_PATH}/vnt2_web" "$wa" "$conf"
+                ;;
+            *)
+                printf '%s|--conf|%s' \
+                    "${BIN_PATH}/vnt2_cli" "$conf"
+                ;;
+        esac
+    elif [ "$type" = "vnts" ]; then
+        printf '%s|-c|%s' \
+            "${BIN_PATH}/vnts2" "$conf"
+    fi
+}
+
+start_instance() {
+    local name="$1" type="$2"
+    local conf="${CONFIG_PATH}/${name}.${type}"
+    local bin_args bin args
+    [ ! -f "$conf" ] && {
+        echo "[$name] 配置文件不存在: $conf"
+        return 1
+    }
+    bin_args=$(get_start_bin_args "$name" "$type" "$conf")
+    [ -z "$bin_args" ] && {
+        echo "[$name] 无法构建启动命令"
+        return 1
+    }
+    bin=$(printf '%s' "$bin_args" | cut -d'|' -f1)
+    args=$(printf '%s' "$bin_args" | cut -d'|' -f2-)
+    [ ! -x "$bin" ] && {
+        echo "[$name] 二进制不存在或不可执行: $bin"
+        return 1
+    }
+    echo "[$name] 注册 procd 实例，bin=$bin"
+    procd_open_instance "$name"
+    procd_set_param command "$bin"
+    local IFS='|'
+    # shellcheck disable=SC2086
+    procd_append_param command $args
+    unset IFS
+
+    # respawn: 崩溃自动重启
+    # 格式: threshold retry timeout
+    # threshold=3600: 1小时内崩溃超过retry次才放弃
+    # retry=5: 最多重试5次
+    # timeout=5: 重启等待5秒
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    # 进程环境变量（可选）
+    # procd_set_param env KEY=VALUE
+    procd_set_param pidfile "/var/run/vnt2_${name}.pid"
+    procd_close_instance
+    echo "[$name] 实例已注册"
+}
+
+each_enabled_instance() {
+    local callback="$1"
+    local tmp sid name enabled type
+    tmp=$(mktemp)
+
+    for type in vnt vnts; do
+        uci -q show vnt2 2>/dev/null \
+            | grep "^vnt2\.[^.]*=${type}$" \
+            | cut -d. -f2 | cut -d= -f1 >> "$tmp"
+    done
+
+    while read -r sid; do
+        name=$(uci    -q get "vnt2.${sid}.name"    2>/dev/null)
+        enabled=$(uci -q get "vnt2.${sid}.enabled" 2>/dev/null)
+        type=$(uci    -q get "vnt2.${sid}"         2>/dev/null)
+        [ -z "$name" ]        && continue
+        [ "$enabled" != "1" ] && continue
+        "$callback" "$name" "$type"
+    done < "$tmp"
+
+    rm -f "$tmp"
+}
+
+start_service() {
+    init_paths
+    echo "VNT2: 启动所有已启用实例..."
+    each_enabled_instance start_instance
+}
