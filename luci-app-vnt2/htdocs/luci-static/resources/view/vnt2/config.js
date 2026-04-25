@@ -635,6 +635,11 @@ function validate(fields, formEl) {
 }
 
 function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent) {
+var collected = collectValues(formEl);
+    console.log('[save] collected:', JSON.stringify(collected));
+var content = self._parser.serializeToToml(fields, collected, templateContent);
+    console.log('[save] serialized content:\n', content);
+
     var errors = validate(fields, formEl);
     if (errors.length) {
         self._ui.notify('以下必填项未填写：' + errors.join('、'), 'error');

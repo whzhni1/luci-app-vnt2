@@ -17,7 +17,9 @@
           "get_settings",
           "get_upstream_version",
           "get_enabled",
-          "get_cpu_ticks"
+          "get_cpu_ticks",
+          "get_update_status",
+          "get_download_status"
         ]
       },
       "uci": {
@@ -40,7 +42,8 @@
           "clear_log",
           "save_settings",
           "do_update",
-          "set_enabled"
+          "set_enabled",
+          "rebuild_firewall"
         ]
       },
       "uci": {

@@ -7,20 +7,16 @@ import { readfile, writefile, stat, lsdir, unlink, popen, open } from "fs";
 import { cursor } from "uci";
 
 const DEFAULTS = {
-    bin_path:    "/usr/bin",
-    config_path: "/etc/vnt2_config",
-    run_dir:     "/var/run",
+    bin_path:      "/usr/bin",
+    config_path:   "/etc/vnt2_config",
+    update_script: "/usr/libexec/vnt2-update.sh",
+    update_dir:    "/tmp/vnt2_update",
+    init_script:     "/etc/init.d/vnt2",
 };
 
 const START_METHODS = {
-    vnt:  ["vnt2_cli", "vnt2_web"],
-    vnts: ["vnts2"],
-};
-
-const API_URLS = {
-    github: (p) => `https://api.github.com/repos/vnt-dev/${p}/releases`,
-    gitee:  (p) => `https://gitee.com/api/v5/repos/whzhni/${p}/releases`,
-    gitlab: (p) => `https://gitlab.com/api/v4/projects/whzhni%2F${p}/releases`,
+    vnt:  "vnt2_cli",
+    vnts: "vnts2",
 };
 
 const SETTING_DEFS = [
@@ -39,9 +35,10 @@ const SETTING_DEFS = [
 ];
 
 let CFG = {
-    bin_path:    DEFAULTS.bin_path,
-    config_path: DEFAULTS.config_path,
-    run_dir:     DEFAULTS.run_dir,
+    bin_path:    "/usr/bin",
+    config_path: "/etc/vnt2_config",
+    run_dir:     "/var/run",
+    log_dir:     "/tmp/vnt2_log",
 };
 
 function system(cmd) {
@@ -76,28 +73,15 @@ function isExecutable(path) {
     return s != null && s.perm != null && s.perm.user_exec === true;
 }
 
-function systemBg(cmd) {
-    let p = popen(cmd, "r");
-    if (!p) return;
-    p.close();
-}
-
 function pidFile(name)        { return `${CFG.run_dir}/vnt2_${name}.pid`; }
 function confFile(name, type) { return `${CFG.config_path}/${name}.${type}`; }
-
-function ensureInstalled(pkg) {
-    if (system(`command -v '${pkg}' > /dev/null 2>&1`) === 0) return true;
-    if (system(`command -v apk > /dev/null 2>&1`) === 0)
-        return system(`apk add '${pkg}' > /dev/null 2>&1`) === 0;
-    return system(`opkg install '${pkg}' > /dev/null 2>&1`) === 0;
-}
 
 function initPaths() {
     let uci = cursor();
     uci.load("vnt2");
     CFG.bin_path    = uci.get("vnt2", "global", "bin_path")    || DEFAULTS.bin_path;
     CFG.config_path = uci.get("vnt2", "global", "config_path") || DEFAULTS.config_path;
-    system(`mkdir -p '${CFG.config_path}' '${CFG.run_dir}'`);
+    system(`mkdir -p '${CFG.config_path}' '${CFG.run_dir}' '${CFG.log_dir}'`);
 }
 
 function getMirror(args) {
@@ -105,10 +89,6 @@ function getMirror(args) {
     let uci = cursor();
     uci.load("vnt2");
     return uci.get("vnt2", "global", "mirror") || "github";
-}
-
-function buildApiUrl(mirror, project) {
-    return (API_URLS[mirror] ?? API_URLS.gitlab)(project);
 }
 
 function getDeviceModel() {
@@ -193,23 +173,7 @@ function getStartMethod(name, type) {
     uciEach(uci, type, (sid, s) => {
         if (s.name === name) { method = s.start_method; return false; }
     });
-    return method || START_METHODS[type][0];
-}
-
-function buildStartCmd(name, type) {
-    let conf   = confFile(name, type);
-    let method = getStartMethod(name, type);
-    if (type === "vnt") {
-        if (method === "vnt2_web") {
-            let wa = readField(conf, "web_addr");
-            if (!wa) return null;
-            return `${CFG.bin_path}/vnt2_web --addr ${wa} --conf ${conf}`;
-        }
-        return `${CFG.bin_path}/vnt2_cli --conf ${conf}`;
-    }
-    if (type === "vnts")
-        return `${CFG.bin_path}/vnts2 -c ${conf}`;
-    return null;
+    return method || START_METHODS[type];
 }
 
 function readCpuTicks(pid) {
@@ -349,7 +313,7 @@ function cmdRebuildFirewall() {
     uci.load("firewall");
     rebuildVntZone(uci);
     uci.commit("firewall");
-    systemBg("fw4 reload > /dev/null 2>&1 &");
+    system("fw4 reload > /dev/null 2>&1 &");
     return { result: "ok" };
 }
 
@@ -368,12 +332,12 @@ function fwRemove(name) {
     if (netUci.get("network", prefix) != null) {
         netUci.delete("network", prefix);
         netUci.commit("network");
-        systemBg("/etc/init.d/network reload > /dev/null 2>&1 &");
+        system("/etc/init.d/network reload > /dev/null 2>&1 &");
     }
 
     rebuildVntZone(uci);
     uci.commit("firewall");
-    systemBg("fw4 reload > /dev/null 2>&1 &");
+    system("fw4 reload > /dev/null 2>&1 &");
 }
 
 function fwApply(name, type, conf) {
@@ -394,7 +358,7 @@ function fwApply(name, type, conf) {
         netUci.set("network", "vnt2_" + name, "proto",  "none");
         netUci.set("network", "vnt2_" + name, "device", tunName);
         netUci.commit("network");
-        systemBg("/etc/init.d/network reload > /dev/null 2>&1 &");
+        system("/etc/init.d/network reload > /dev/null 2>&1 &");
 
         rebuildVntZone(uci);
 
@@ -423,7 +387,7 @@ function fwApply(name, type, conf) {
     }
 
     uci.commit("firewall");
-    systemBg("fw4 reload > /dev/null 2>&1 &");
+    system("fw4 reload > /dev/null 2>&1 &");
 }
 
 function doStart(name) {
@@ -431,10 +395,13 @@ function doStart(name) {
     let type = getType(name);
     if (!type)           return { result: "error", msg: "配置文件不存在" };
     if (isRunning(name)) return { result: "already_running" };
-    let conf   = confFile(name, type);
-    let method = getStartMethod(name, type);
-    let pf     = pidFile(name);
+
+    let conf    = confFile(name, type);
+    let method  = getStartMethod(name, type);
+    let pf      = pidFile(name);
+    let logFile = `${CFG.log_dir}/${name}.log`;
     fwApply(name, type, conf);
+
     let cmdJson;
     if (type === "vnt") {
         if (method === "vnt2_web") {
@@ -461,9 +428,20 @@ function doStart(name) {
     system("sleep 2");
     let pid = trim(safeRead(pf));
     if (pidAlive(pid)) return { result: "ok", pid };
-    let cmd = buildStartCmd(name, type);
-    if (!cmd) return { result: "error", msg: "启动失败" };
-    system(`sh -c '${cmd} > /dev/null 2>&1 & echo $! > "${pf}"'`);
+
+    let fallbackCmd;
+    if (type === "vnt") {
+        if (method === "vnt2_web") {
+            let wa = readField(conf, "web_addr");
+            if (!wa) return { result: "error", msg: "启动失败" };
+            fallbackCmd = `${CFG.bin_path}/vnt2_web --addr ${wa} --conf ${conf}`;
+        } else {
+            fallbackCmd = `${CFG.bin_path}/vnt2_cli --conf ${conf}`;
+        }
+    } else {
+        fallbackCmd = `${CFG.bin_path}/vnts2 -c ${conf}`;
+    }
+    system(`sh -c '${fallbackCmd} >> "${logFile}" 2>&1 & echo $! > "${pf}"'`);
     system("sleep 1");
     pid = trim(safeRead(pf));
     if (pidAlive(pid)) return { result: "ok", pid };
@@ -489,27 +467,40 @@ function doStop(name) {
 
 function doRestart(name) {
     doStop(name);
-    system("sleep 1");
     return doStart(name);
 }
 
 function cmdGetLog(args) {
-    let name  = args.name;
-    let lines = int(args.lines) || 200;
+    initPaths();
+    let name    = args.name;
+    let lines   = int(args.lines) || 200;
+    let logFile = `${CFG.log_dir}/${name}.log`;
+    let parts   = [];
+    if (fileExists(logFile)) {
+        let fileOut = execOutput(`tail -n ${lines} '${logFile}' 2>/dev/null`);
+        if (fileOut && trim(fileOut))
+            push(parts, trim(fileOut));
+    }
     let pid = trim(safeRead(pidFile(name)));
-    if (!pid || !pidAlive(pid))
-        return { content: "" };
-    let out = execOutput(
-        `logread 2>/dev/null | grep -F "[${pid}]" | tail -n ${lines}`
-    );
-    return { content: out ?? "" };
+    if (pid && pidAlive(pid)) {
+        let logOut = execOutput(
+            `logread 2>/dev/null | grep -F "[${pid}]" | tail -n ${lines}`
+        );
+        if (logOut && trim(logOut))
+            push(parts, trim(logOut));
+    }
+    return { content: join("\n", parts) };
 }
 
 function cmdClearLog(args) {
-    return {
-        result: "ok",
-        msg:    "日志将在系统重启后自动清空。",
-    };
+    initPaths();
+    let name    = args.name;
+    let logFile = `${CFG.log_dir}/${name}.log`;
+    if (fileExists(logFile)) {
+        let f = open(logFile, "w");
+        if (f) f.close();
+    }
+    return { result: "ok" };
 }
 
 function cmdGetEnabled(args) {
@@ -522,7 +513,7 @@ function cmdGetEnabled(args) {
     uciEach(uci, type, (sid, s) => {
         if (s.name) uciState[s.name] = {
             enabled:      s.enabled === "1",
-            start_method: s.start_method || START_METHODS[type][0],
+            start_method: s.start_method || START_METHODS[type],
             method_set:   s.method_set === "1",
         };
     });
@@ -531,7 +522,7 @@ function cmdGetEnabled(args) {
         let name     = names[i];
         let s        = uciState[name] ?? {
             enabled:      false,
-            start_method: START_METHODS[type][0],
+            start_method: START_METHODS[type],
             method_set:   false,
         };
         let web_addr = (type === "vnt")
@@ -569,7 +560,7 @@ function cmdSetEnabled(args) {
         uci.set("vnt2", sid, "name",         item.name);
         uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
         uci.set("vnt2", sid, "start_method",
-                item.start_method || START_METHODS[cfgType][0]);
+                item.start_method || START_METHODS[cfgType]);
         uci.set("vnt2", sid, "method_set",   "1");
         idx++;
     }
@@ -583,7 +574,6 @@ function cmdSetEnabled(args) {
             if (isRunning(item.name))  doStop(item.name);
         }
     }
-
     return { result: "ok" };
 }
 
@@ -813,15 +803,6 @@ function fmtWebInfo(d) {
     return join("\n", lines);
 }
 
-function fmtWebIps(d) {
-    if (!d) return "获取失败";
-    return join("\n", [
-        "虚拟IP: " + (d.ip || '-') + (d.prefix_len ? '/' + d.prefix_len : ''),
-        "网关:   " + (d.gateway   || '-'),
-        "设备ID: " + (d.device_id || '-'),
-    ]);
-}
-
 function fmtBytes(b) {
     if (!b || b <= 0) return '0 B';
     let units = ['B', 'KB', 'MB', 'GB'];
@@ -921,10 +902,6 @@ function cmdGetCtrlInfo(args) {
                 let r = fetchWebApi(webAddr, "/api/info");
                 return (r && r.code === 0) ? fmtWebInfo(r.data) : "获取失败";
             },
-            ips:     function() {
-                let r = fetchWebApi(webAddr, "/api/info");
-                return (r && r.code === 0) ? fmtWebIps(r.data) : "获取失败";
-            },
             clients: function() {
                 let r = fetchWebApi(webAddr, "/api/peers");
                 return (r && r.code === 0) ? fmtWebClients(r.data) : "获取失败";
@@ -956,6 +933,10 @@ function cmdGetSystemInfo() {
         r[vers[i][0]] = trim(execOutput(
             `${CFG.bin_path}/${vers[i][1]} --version 2>/dev/null | head -1`
         ));
+    r.luci_version =
+        trim(execOutput("apk list 2>/dev/null | grep luci-app-vnt2 | awk '{print $3}'")) ||
+        trim(execOutput("opkg list-installed 2>/dev/null | grep luci-app-vnt2 | awk '{print $3}'")) ||
+        "未知";
     return r;
 }
 
@@ -983,150 +964,83 @@ function cmdSaveSettings(args) {
     uci.load("vnt2");
     for (let i = 0; i < length(SETTING_DEFS); i++) {
         let k = SETTING_DEFS[i][0];
-        if      (k === "auto_update")     uci.set("vnt2", "global", k, args[k] ? "1" : "0");
-        else if (k === "upx_compressed")  uci.set("vnt2", "global", k, args[k] ? "1" : "0");
-        else if (k === "update_interval") uci.set("vnt2", "global", k, `${int(args[k]) || 7}`);
-        else                              uci.set("vnt2", "global", k, args[k] ?? "");
+        if (k === "update_interval") {
+            uci.set("vnt2", "global", k, `${int(args[k]) || 7}`);
+        } else if (k === "bin_path" || k === "config_path" ||
+                   k === "arch"     || k === "mirror") {
+            uci.set("vnt2", "global", k, args[k] ?? "");
+        } else {
+            uci.set("vnt2", "global", k, args[k] ? "1" : "0");
+        }
     }
     uci.commit("vnt2");
     initPaths();
+    system(`${DEFAULTS.init_script} reload`);
     return { result: "ok" };
 }
 
-function extractAssets(raw, project) {
-    let result = [];
-    let seen   = {};
-    let parts  = split(raw, '"');
-    for (let i = 0; i < length(parts); i++) {
-        let s = parts[i];
-        if (substr(s, 0, 8) !== "https://") continue;
-        if (index(s, project) < 0)           continue;
-        if (index(s, "linux") < 0)           continue;
-        if (seen[s])                          continue;
-        seen[s] = true;
-        let nm  = match(s, /\/([^\/]+)$/);
-        push(result, { name: nm ? nm[1] : s, url: s });
-    }
-    return result;
-}
+function updStatusFile(p) { return `${DEFAULTS.update_dir}/${p}.status`;    }
+function updLogFile(p)    { return `${DEFAULTS.update_dir}/${p}.log`;       }
+function updSlimFile(p)   { return `${DEFAULTS.update_dir}/${p}.slim.json`; }
 
 function cmdGetUpstreamVersion(args) {
-    if (!ensureInstalled("curl"))
-        return { releases: [], error: "curl 不可用且安装失败" };
-    let url = buildApiUrl(getMirror(args), args.project);
-    let raw = execOutput(`curl -fsSL --connect-timeout 10 --max-time 30 '${url}' 2>/dev/null`);
-    if (!raw) return { releases: [] };
-    let releases = [];
-    let parts    = split(raw, '"tag_name"');
-    for (let i = 1; i < length(parts); i++) {
-        let tagM = match(parts[i], /^\s*:\s*"([^"]+)"/);
-        if (!tagM) continue;
-        let assets = extractAssets(parts[i], args.project);
-        if (length(assets) === 0) continue;
-        push(releases, { tag: tagM[1], assets });
-    }
-    return { releases };
-}
-
-function detectFileType(path) {
-    let f = open(path, "r");
-    if (!f) return null;
-    let magic = f.read(8);
-    f.close();
-    let sigs = [
-        [0x7f, 0x45, 0x4c, 0x46, "elf"],
-        [0x1f, 0x8b,             "gz" ],
-        [0x50, 0x4b, 0x03, 0x04, "zip"],
-    ];
-    for (let i = 0; i < length(sigs); i++) {
-        let sig = sigs[i];
-        let ok  = true;
-        for (let j = 0; j < length(sig) - 1; j++) {
-            if (ord(magic, j) !== sig[j]) { ok = false; break; }
-        }
-        if (ok) return sig[length(sig) - 1];
-    }
-    return null;
-}
-
-function installOne(src, bin, upx) {
-    let dst = `${CFG.bin_path}/${bin}`;
-    if (upx && ensureInstalled("upx")) {
-        if (system(`upx -q '${src}' -o '${dst}' 2>/dev/null`) !== 0)
-            system(`cp '${src}' '${dst}'`);
-    } else {
-        system(`cp '${src}' '${dst}'`);
-    }
-    system(`chmod 755 '${dst}'`);
-}
-
-function installBinary(tmp, project, upx) {
-    let bins  = (project === "vnt")
-        ? ["vnt2_cli", "vnt2_web", "vnt2_ctrl"]
-        : ["vnts2"];
-    let installed = [];
-    let msg       = "";
-    let ftype     = detectFileType(tmp);
-    if (ftype === "gz" || ftype === "zip") {
-        let dir = "/tmp/vnt2_upd_dir";
-        system(`mkdir -p '${dir}'`);
-        if (ftype === "gz") {
-            system(`tar -xzf '${tmp}' -C '${dir}' 2>/dev/null`);
-        } else {
-            if (!ensureInstalled("unzip")) {
-                unlink(tmp);
-                return { result: "error", msg: "unzip 不可用且安装失败" };
-            }
-            system(`unzip -o '${tmp}' -d '${dir}' 2>/dev/null`);
-        }
-        for (let i = 0; i < length(bins); i++) {
-            let bin = bins[i];
-            let src = trim(execOutput(
-                `find '${dir}' -name '${bin}' -type f 2>/dev/null | head -1`
-            ));
-            if (!src || detectFileType(src) !== "elf") {
-                msg += `未找到或无效: ${bin}\n`;
-                continue;
-            }
-            installOne(src, bin, upx);
-            push(installed, bin);
-            msg += `已安装 ${bin} -> ${CFG.bin_path}/${bin}\n`;
-        }
-        system(`rm -rf '${dir}'`);
-    } else if (ftype === "elf") {
-        let bin = bins[0];
-        installOne(tmp, bin, upx);
-        push(installed, bin);
-        msg += `已安装 ${bin} -> ${CFG.bin_path}/${bin}\n`;
-    } else {
-        unlink(tmp);
-        return { result: "error", msg: "未知文件格式" };
-    }
-    unlink(tmp);
-    return length(installed) > 0
-        ? { result: "ok", installed: join(", ", installed), msg }
-        : { result: "error", msg: "未找到可安装文件\n" + msg };
+    let project = args.project;
+    let mirror  = getMirror(args);
+    system(`mkdir -p '${DEFAULTS.update_dir}'`);
+    system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
+    system(
+        `nohup setsid '${DEFAULTS.update_script}' check '${project}' '${mirror}'` +
+        ` >> '${updLogFile(project)}' 2>&1 &`
+    );
+    return { result: "ok" };
 }
 
 function cmdDoUpdate(args) {
-    initPaths();
-    if (!ensureInstalled("curl"))
-        return { result: "error", msg: "curl 不可用且安装失败" };
-    let url = buildApiUrl(getMirror(args), args.project);
-    let raw = execOutput(`curl -fsSL --connect-timeout 10 --max-time 30 '${url}' 2>/dev/null`);
-    if (!raw) return { result: "error", msg: "获取版本信息失败" };
-    let assets = extractAssets(raw, args.project);
-    let dlUrl  = null;
-    for (let i = 0; i < length(assets); i++) {
-        if (assets[i].name === args.filename) { dlUrl = assets[i].url; break; }
-    }
-    if (!dlUrl) return { result: "error", msg: "未找到下载链接" };
-    let tmp = `/tmp/vnt2_upd_${args.filename}`;
-    let rc  = system(
-        `curl -fsSL --connect-timeout 15 --max-time 180 -o '${tmp}' '${dlUrl}' 2>/dev/null`
+    let project  = args.project;
+    let tag      = args.tag;
+    let filename = args.filename;
+    let upx      = args.upx ? "1" : "0";
+    system(`mkdir -p '${DEFAULTS.update_dir}'`);
+    system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
+    system(
+        `nohup setsid '${DEFAULTS.update_script}' download` +
+        ` '${project}' '${tag}' '${filename}' '${upx}'` +
+        ` >> '${updLogFile(project)}' 2>&1 &`
     );
-    if (rc !== 0) return { result: "error", msg: "下载失败" };
-    return installBinary(tmp, args.project, args.upx);
+    return { result: "ok" };
+}
+
+function cmdGetUpdateStatus(args) {
+    let project = args.project;
+    let statusF = updStatusFile(project);
+    let logF    = updLogFile(project);
+    let slimF   = updSlimFile(project);
+
+    if (!fileExists(statusF)) return { status: "idle" };
+
+    let status  = trim(safeRead(statusF));
+    let logTail = fileExists(logF)
+        ? trim(execOutput(`tail -n 30 '${logF}' 2>/dev/null`)) : "";
+
+    if (status === "checking")
+        return { status: "checking", log: logTail };
+
+    if (substr(status, 0, 6) === "ready:") {
+        let count    = substr(status, 6);
+        let releases = fileExists(slimF) ? json(safeRead(slimF)) : null;
+        return { status: "ready", count, releases, log: logTail };
+    }
+
+    if (status === "downloading" || status === "installing")
+        return { status, log: logTail };
+
+    if (substr(status, 0, 5) === "done:")
+        return { status: "done", installed: substr(status, 5), log: logTail };
+
+    if (substr(status, 0, 6) === "error:")
+        return { status: "error", msg: substr(status, 6), log: logTail };
+
+    return { status: "idle" };
 }
 
 const METHODS = {
@@ -1150,10 +1064,11 @@ const METHODS = {
     save_settings:        cmdSaveSettings,
     get_upstream_version: cmdGetUpstreamVersion,
     do_update:            cmdDoUpdate,
+    get_update_status:    cmdGetUpdateStatus,
     get_enabled:          cmdGetEnabled,
     set_enabled:          cmdSetEnabled,
     get_cpu_ticks:        cmdGetCpuTicks,
-    rebuild_firewall: cmdRebuildFirewall,
+    rebuild_firewall:     cmdRebuildFirewall,
 };
 
 const SIGNATURES = {
@@ -1174,26 +1089,34 @@ const SIGNATURES = {
     get_system_info:      {},
     check_binaries:       {},
     get_settings:         {},
-    save_settings:        {
-        bin_path: "String", config_path: "String", arch: "String",
-        mirror: "String", auto_update: "Boolean",
-        update_interval: "Integer", upx_compressed: "Boolean",
+    save_settings: {
+        bin_path:        "String",
+        config_path:     "String",
+        arch:            "String",
+        mirror:          "String",
+        auto_update:     "Boolean",
+        update_interval: "Integer",
+        upx_compressed:  "Boolean",
+        fw_vnt_to_lan:   "Boolean",
+        fw_lan_to_vnt:   "Boolean",
+        fw_vnt_to_wan:   "Boolean",
+        fw_wan_to_vnt:   "Boolean",
+        fw_vnts_web:     "Boolean",
     },
     get_upstream_version: { project: "String", mirror: "String" },
-    do_update:            { project: "String", filename: "String", upx: "Boolean", mirror: "String" },
+    do_update:            { project: "String", tag: "String", filename: "String", upx: "Boolean" },
+    get_update_status:    { project: "String" },
     get_enabled:          { type: "String" },
     set_enabled:          { type: "String", configs: "String" },
     get_cpu_ticks:        { name: "String" },
-    rebuild_firewall: {},
+    rebuild_firewall:     {},
 };
 
 let argv = ARGV;
-
 switch (argv[0]) {
     case "list":
         print(sprintf("%J", SIGNATURES), "\n");
         break;
-
     case "call": {
         let method = argv[1];
         let raw    = readfile("/dev/stdin") ?? "{}";
@@ -1203,15 +1126,13 @@ switch (argv[0]) {
             print(sprintf("%J", { error: "未知方法" }), "\n");
         } else {
             try {
-                let result = fn(input);
-                print(sprintf("%J", result), "\n");
+                print(sprintf("%J", fn(input)), "\n");
             } catch(e) {
                 print(sprintf("%J", { error: `${e}` }), "\n");
             }
         }
         break;
     }
-
     default:
         warn(`Usage: ${argv[0]} {list|call <method>}\n`);
         exit(1);

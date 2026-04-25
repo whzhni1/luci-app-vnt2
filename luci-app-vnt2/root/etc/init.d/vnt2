@@ -8,6 +8,9 @@ USE_PROCD=1
 BIN_PATH="/usr/bin"
 CONFIG_PATH="/etc/vnt2_config"
 LOG_DIR="/tmp/vnt2_log"
+CRON_TAG="vnt2_auto_update"
+UPDATE_SCRIPT="/usr/libexec/vnt2-update.sh"
+CRON_FILE="/etc/crontabs/root"
 
 init_paths() {
     local v
@@ -138,8 +141,38 @@ each_enabled_instance() {
     rm -f "$tmp"
 }
 
+setup_cron() {
+    local enabled interval existing new_entry
+    enabled=$(uci -q get vnt2.global.auto_update)
+    interval=$(uci -q get vnt2.global.update_interval)
+    interval="${interval:-7}"
+    new_entry="0 3 */${interval} * * $UPDATE_SCRIPT #${CRON_TAG}"
+    if [ "$enabled" != "1" ]; then
+        sed -i "/${CRON_TAG}/d" "$CRON_FILE"
+        /etc/init.d/cron restart
+        return
+    fi
+    existing=$(grep "${CRON_TAG}" "$CRON_FILE" 2>/dev/null)
+    [ "$existing" = "$new_entry" ] && return
+    sed -i "/${CRON_TAG}/d" "$CRON_FILE"
+    echo "$new_entry" >> "$CRON_FILE"
+    /etc/init.d/cron restart
+}
+
+service_triggers() {
+    procd_add_reload_trigger "vnt2"
+}
+
 start_service() {
     init_paths
     echo "VNT2: 启动所有已启用实例..."
     each_enabled_instance start_instance
+}
+
+reload_service() {
+    setup_cron
+}
+
+stop_service() {
+    :
 }

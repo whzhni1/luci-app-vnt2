@@ -3,6 +3,7 @@
 // /www/luci-static/resources/vnt2/common.js
 
 var RE_TOML_TABLE = /^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/;
+var NO_COMMENT_FIELDS = ['white_list'];
 
 function escapeStr(s) {
     return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -80,94 +81,114 @@ var VNT2ConfigParser = {
 
         content.split('\n').forEach(function(line) {
             var trimmed = line.trim();
-            if (!trimmed || trimmed.charAt(0) === '#') return;
+            if (!trimmed) return;
 
-            var tblMatch = trimmed.match(RE_TOML_TABLE);
+            var checkLine = trimmed;
+            if (trimmed.charAt(0) === '#') {
+                checkLine = trimmed.substring(1).trim();
+                if (!checkLine || checkLine.indexOf('=') < 0) return;
+            }
+
+            var tblMatch = checkLine.match(RE_TOML_TABLE);
             if (tblMatch) {
                 currentSection = tblMatch[1];
                 if (!values[currentSection]) values[currentSection] = {};
                 return;
             }
 
-            var eqIdx = trimmed.indexOf('=');
+            var eqIdx = checkLine.indexOf('=');
             if (eqIdx < 0) return;
-            var key = trimmed.substring(0, eqIdx).trim();
-            var val = trimmed.substring(eqIdx + 1).trim();
+            var key = checkLine.substring(0, eqIdx).trim();
+            var val = checkLine.substring(eqIdx + 1).trim();
 
             if (currentSection) {
-                values[currentSection][key] = val.replace(/^["']|["']$/g, '');
+                values[currentSection][key] =
+                    val.replace(/^["']|["']$/g, '');
             } else {
                 values[key] = VNT2ConfigParser._parseRawValue(val);
             }
         });
+        console.log('[parseValues] result:', JSON.stringify(values));
         return values;
     },
 
-    serializeToToml: function(fields, values, templateContent) {
+        serializeToToml: function(fields, values, templateContent) {
         if (!templateContent) return '';
+        console.log('[serialize] values:', JSON.stringify(values));
+        console.log('[serialize] fields:', JSON.stringify(fields));
 
-        var typeMap    = {};
-        var sectionSet = {};
-        fields.forEach(function(f) {
-            typeMap[f.name] = f.type;
-            if (f.type === 'section') sectionSet[f.name] = true;
-        });
+        var resultLines    = [];
+        var typeMap        = {};
+        var currentSection = null;
+        var skipSection    = false;
 
-        var resultLines = [];
-        var tplLines    = templateContent.split('\n');
-        var inSection   = null;
-        var sectionDone = {};
+        fields.forEach(function(f) { typeMap[f.name] = f.type; });
 
-        for (var i = 0; i < tplLines.length; i++) {
-            var line    = tplLines[i];
+        templateContent.split('\n').forEach(function(line) {
             var trimmed = line.trim();
+            if (!trimmed) {
+                if (currentSection === null) resultLines.push('');
+                return;
+            }
 
             var tblMatch = trimmed.match(RE_TOML_TABLE);
             if (tblMatch) {
-                var tbl   = tblMatch[1];
-                inSection = sectionSet[tbl] ? tbl : null;
-
-                if (sectionSet[tbl] && !sectionDone[tbl]) {
-                    resultLines.push('');
-                    resultLines.push('[' + tbl + ']');
-                    var obj = values[tbl];
-                    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-                        Object.keys(obj).forEach(function(k) {
-                            var v = String(obj[k]).trim();
-                            if (k.trim() && v)
-                                resultLines.push(k + ' = "' + escapeStr(v) + '"');
+                var secName = tblMatch[1];
+                if (currentSection !== null) {
+                    var secVals = values[currentSection];
+                    if (secVals && typeof secVals === 'object') {
+                        Object.keys(secVals).forEach(function(k) {
+                            var v = secVals[k];
+                            resultLines.push(
+                                v && String(v).trim()
+                                    ? k + ' = "' + escapeStr(String(v)) + '"'
+                                    : '# ' + k + ' = ""'
+                            );
                         });
                     }
-                    sectionDone[tbl] = true;
-                } else {
-                    resultLines.push(line);
+                    resultLines.push('');
                 }
-                continue;
-            }
 
-            if (inSection) {
-                if (trimmed.charAt(0) === '#') resultLines.push(line);
-                continue;
-            }
-
-            if (!trimmed || trimmed.charAt(0) === '#') {
+                currentSection = secName;
                 resultLines.push(line);
-                continue;
+                var secVals = values[secName];
+                if (secVals && typeof secVals === 'object') {
+                    Object.keys(secVals).forEach(function(k) {
+                        var v = secVals[k];
+                        resultLines.push(
+                            v && String(v).trim()
+                                ? k + ' = "' + escapeStr(String(v)) + '"'
+                                : '# ' + k + ' = ""'
+                        );
+                    });
+                }
+                return;
             }
 
-            var eqIdx = trimmed.indexOf('=');
-            if (eqIdx >= 0) {
-                var key = trimmed.substring(0, eqIdx).trim();
+            if (currentSection !== null) {
+                return;
+            }
+
+            var checkLine = trimmed;
+            if (trimmed.charAt(0) === '#') {
+                checkLine = trimmed.substring(1).trim();
+            }
+            var eqIdx = checkLine.indexOf('=');
+            if (eqIdx < 0) {
+                resultLines.push(line);
+                return;
+            }
+            var key = checkLine.substring(0, eqIdx).trim();
+
+            if (Object.prototype.hasOwnProperty.call(values, key)) {
                 resultLines.push(
-                    Object.prototype.hasOwnProperty.call(values, key)
-                        ? VNT2ConfigParser._formatField(key, values[key], typeMap[key])
-                        : line
+                    VNT2ConfigParser._formatField(key, values[key], typeMap[key])
                 );
-                continue;
+            } else {
+                resultLines.push(line);
             }
+        });
 
-            resultLines.push(line);
-        }
         return resultLines.join('\n');
     },
 
@@ -180,7 +201,10 @@ var VNT2ConfigParser = {
     _formatField: function(key, value, type) {
         if (type === 'array' || Array.isArray(value)) {
             var arr = Array.isArray(value) ? value : [];
-            if (!arr.length) return key + ' = []';
+            if (!arr.length)
+                return NO_COMMENT_FIELDS.indexOf(key) >= 0
+                    ? key + ' = []'
+                    : '# ' + key + ' = []';
             return key + ' = [' + arr.map(function(v) {
                 return '"' + escapeStr(v) + '"';
             }).join(', ') + ']';
@@ -190,7 +214,11 @@ var VNT2ConfigParser = {
         if (type === 'int' || typeof value === 'number')
             return key + ' = ' + (parseInt(value) || 0);
         if (typeof value === 'string')
-            return key + ' = "' + escapeStr(value) + '"';
+            return value.trim()
+                ? key + ' = "' + escapeStr(value) + '"'
+                : NO_COMMENT_FIELDS.indexOf(key) >= 0
+                    ? key + ' = ""'
+                    : '# ' + key + ' = ""';
         return key + ' = ' + String(value);
     },
 

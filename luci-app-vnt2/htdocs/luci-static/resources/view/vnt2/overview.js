@@ -137,7 +137,7 @@ return view.extend({
                 'style': [
                     'text-align:center', 'padding:12px', 'margin-top:16px',
                     'border-radius:8px', 'outline:1px solid #ddd',
-                    'font-size:13px', 'color:#666'
+                    'font-size:13px', 'color:#666', 'margin-bottom:60px'
                 ].join(';')
             }, linkNodes)
         ]);

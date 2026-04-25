@@ -289,9 +289,11 @@ return view.extend({
         var self = this;
         if (!self._currentInstance) return;
         self._ui.notify(
-            '日志由系统环形缓冲区管理，重启后自动清空，无法手动清除',
-            'info'
-        );
+        '日志由系统环形缓冲区管理，重启后自动清空',);
+        'info'
+        callClearLog(self._currentInstance).then(function() {
+            self._loadLog();
+        });
     },
 
     _stopAuto: function() {
