@@ -11,7 +11,7 @@ const DEFAULTS = {
     config_path:   "/etc/vnt2_config",
     update_script: "/usr/libexec/vnt2-update.sh",
     update_dir:    "/tmp/vnt2_update",
-    init_script:     "/etc/init.d/vnt2",
+    init_script:   "/etc/init.d/vnt2",
 };
 
 const START_METHODS = {
@@ -31,6 +31,7 @@ const SETTING_DEFS = [
     ["fw_lan_to_vnt",   "1"               ],
     ["fw_vnt_to_wan",   "0"               ],
     ["fw_wan_to_vnt",   "0"               ],
+    ["fw_vnt_web",      "0"               ],
     ["fw_vnts_web",     "0"               ],
 ];
 
@@ -55,19 +56,12 @@ function execOutput(cmd) {
     return out ?? "";
 }
 
-function safeRead(path) {
-    return readfile(path) ?? "";
-}
-
+function safeRead(path)       { return readfile(path) ?? ""; }
 function writeFile(path, content) {
     let r = writefile(path, content);
     return r != null && r > 0;
 }
-
-function fileExists(path) {
-    return stat(path) != null;
-}
-
+function fileExists(path)     { return stat(path) != null; }
 function isExecutable(path) {
     let s = stat(path);
     return s != null && s.perm != null && s.perm.user_exec === true;
@@ -152,9 +146,7 @@ function isRunning(name) {
     return length(pid) > 0 && pidAlive(pid);
 }
 
-function readPid(name) {
-    return trim(safeRead(pidFile(name)));
-}
+function readPid(name) { return trim(safeRead(pidFile(name))); }
 
 function getType(name) {
     if (fileExists(confFile(name, "vnt")))  return "vnt";
@@ -197,12 +189,13 @@ function cmdGetCpuTicks(args) {
 }
 
 function instanceInfo(name) {
-    let type     = getType(name);
-    let running  = isRunning(name);
-    let pid      = running ? readPid(name) : "";
-    let uptime   = 0;
-    let mem      = "0";
+    let type    = getType(name);
+    let running = isRunning(name);
+    let pid     = running ? readPid(name) : "";
+    let uptime  = 0;
+    let mem     = "0";
     let web_addr = "";
+
     if (running && pid) {
         let hz      = int(trim(execOutput("getconf CLK_TCK 2>/dev/null"))) || 100;
         let sparts  = split(safeRead(`/proc/${pid}/stat`), " ");
@@ -213,366 +206,82 @@ function instanceInfo(name) {
             uptime = uptSec - int(startJ / hz);
             if (uptime < 0) uptime = 0;
         }
-
         let mlines = split(safeRead(`/proc/${pid}/status`), "\n");
         for (let i = 0; i < length(mlines); i++) {
             let m = match(mlines[i], /^VmRSS:\s*(\d+)/);
             if (m) { mem = sprintf("%.1f", int(m[1]) / 1024); break; }
         }
-
         let conf = confFile(name, type);
-        if (type === "vnt")
-            web_addr = readField(conf, "web_addr");
-        else if (type === "vnts")
-            web_addr = readField(conf, "web_bind");
+        web_addr = (type === "vnt")
+            ? readField(conf, "web_addr")
+            : readField(conf, "web_bind");
     }
     return { name, type: type ?? "unknown", running, pid, web_addr, uptime, mem };
-}
-
-function fwAddRule(uci, id, proto, port) {
-    if (!port || port === "0") return;
-    uci.set("firewall", id, "rule");
-    uci.set("firewall", id, "name",      id);
-    uci.set("firewall", id, "src",       "wan");
-    uci.set("firewall", id, "proto",     proto);
-    uci.set("firewall", id, "dest_port", port);
-    uci.set("firewall", id, "target",    "ACCEPT");
-    uci.set("firewall", id, "enabled",   "1");
-}
-
-function extractPort(addr) {
-    if (!addr) return "";
-    let parts = split(addr, ":");
-    let port  = parts[length(parts) - 1];
-    if (!match(port, /^\d+$/) || int(port) < 1 || int(port) > 65535)
-        return "";
-    return port;
-}
-
-function rebuildVntZone(uci) {
-    let netUci = cursor();
-    netUci.load("network");
-    let nets  = [];
-    let files = listConfFiles("vnt");
-    for (let i = 0; i < length(files); i++) {
-        let netId = "vnt2_" + files[i].name;
-        if (netUci.get("network", netId) != null)
-            push(nets, netId);
-    }
-
-    let zoneId = "vnt2_vnt_zone";
-    let fwIds  = ["vnt2_vnt_l2v","vnt2_vnt_v2l","vnt2_vnt_v2w","vnt2_vnt_w2v"];
-    if (!length(nets)) {
-        uci.delete("firewall", zoneId);
-        for (let i = 0; i < length(fwIds); i++)
-            uci.delete("firewall", fwIds[i]);
-        return;
-    }
-
-    let cfgUci = cursor();
-    cfgUci.load("vnt2");
-    let fwL2V = cfgUci.get("vnt2", "global", "fw_lan_to_vnt") !== "0";
-    let fwV2L = cfgUci.get("vnt2", "global", "fw_vnt_to_lan") !== "0";
-    let fwV2W = cfgUci.get("vnt2", "global", "fw_vnt_to_wan") === "1";
-    let fwW2V = cfgUci.get("vnt2", "global", "fw_wan_to_vnt") === "1";
-
-    uci.set("firewall", zoneId, "zone");
-    let zoneFields = [
-        ["name",    "vnt2_vnt"      ],
-        ["input",   "ACCEPT"        ],
-        ["output",  "ACCEPT"        ],
-        ["forward", "ACCEPT"        ],
-        ["masq",    "1"             ],
-        ["mtu_fix", "1"             ],
-        ["network", join(" ", nets) ],
-    ];
-    for (let i = 0; i < length(zoneFields); i++)
-        uci.set("firewall", zoneId, zoneFields[i][0], zoneFields[i][1]);
-
-    let fwRules = [
-        ["vnt2_vnt_l2v", fwL2V, "lan",      "vnt2_vnt"],
-        ["vnt2_vnt_v2l", fwV2L, "vnt2_vnt", "lan"     ],
-        ["vnt2_vnt_v2w", fwV2W, "vnt2_vnt", "wan"     ],
-        ["vnt2_vnt_w2v", fwW2V, "wan",      "vnt2_vnt"],
-    ];
-    for (let i = 0; i < length(fwRules); i++) {
-        let r = fwRules[i];
-        if (r[1]) {
-            uci.set("firewall", r[0], "forwarding");
-            uci.set("firewall", r[0], "src",  r[2]);
-            uci.set("firewall", r[0], "dest", r[3]);
-        } else {
-            uci.delete("firewall", r[0]);
-        }
-    }
-}
-
-function cmdRebuildFirewall() {
-    initPaths();
-    let uci = cursor();
-    uci.load("firewall");
-    rebuildVntZone(uci);
-    uci.commit("firewall");
-    system("fw4 reload > /dev/null 2>&1 &");
-    return { result: "ok" };
-}
-
-function fwRemove(name) {
-    let prefix = "vnt2_" + name;
-    let uci    = cursor();
-    uci.load("firewall");
-
-    uci.foreach("firewall", "rule", function(s) {
-        if (s.name && index(s.name, prefix) === 0)
-            uci.delete("firewall", s[".name"]);
-    });
-
-    let netUci = cursor();
-    netUci.load("network");
-    if (netUci.get("network", prefix) != null) {
-        netUci.delete("network", prefix);
-        netUci.commit("network");
-        system("/etc/init.d/network reload > /dev/null 2>&1 &");
-    }
-
-    rebuildVntZone(uci);
-    uci.commit("firewall");
-    system("fw4 reload > /dev/null 2>&1 &");
-}
-
-function fwApply(name, type, conf) {
-    fwRemove(name);
-    let uci = cursor();
-    uci.load("firewall");
-
-    if (type === "vnt") {
-        let ctrlPort = extractPort(readField(conf, "ctrl_port") || "11233");
-        fwAddRule(uci, "vnt2_" + name + "_ctrl", "tcp", ctrlPort);
-        let waPort = extractPort(readField(conf, "web_addr"));
-        fwAddRule(uci, "vnt2_" + name + "_web", "tcp", waPort);
-
-        let tunName = readField(conf, "tun_name") || ("vnt_" + name);
-        let netUci  = cursor();
-        netUci.load("network");
-        netUci.set("network", "vnt2_" + name, "interface");
-        netUci.set("network", "vnt2_" + name, "proto",  "none");
-        netUci.set("network", "vnt2_" + name, "device", tunName);
-        netUci.commit("network");
-        system("/etc/init.d/network reload > /dev/null 2>&1 &");
-
-        rebuildVntZone(uci);
-
-    } else if (type === "vnts") {
-        let binds = [
-            ["tcp_bind",  "tcp"],
-            ["quic_bind", "udp"],
-            ["ws_bind",   "tcp"],
-            ["web_bind",  "tcp"],
-        ];
-        for (let i = 0; i < length(binds); i++) {
-            let port = extractPort(readField(conf, binds[i][0]));
-            if (!port) continue;
-            fwAddRule(uci, "vnt2_" + name + "_" + binds[i][0], binds[i][1], port);
-        }
-
-        let cfgUci = cursor();
-        cfgUci.load("vnt2");
-        let fwVntsWeb = cfgUci.get("vnt2", "global", "fw_vnts_web") === "1";
-        let webPort   = extractPort(readField(conf, "web_bind"));
-        if (fwVntsWeb && webPort) {
-            fwAddRule(uci, "vnt2_" + name + "_web_wan", "tcp", webPort);
-        } else {
-            uci.delete("firewall", "vnt2_" + name + "_web_wan");
-        }
-    }
-
-    uci.commit("firewall");
-    system("fw4 reload > /dev/null 2>&1 &");
 }
 
 function doStart(name) {
     initPaths();
     let type = getType(name);
-    if (!type)           return { result: "error", msg: "配置文件不存在" };
-    if (isRunning(name)) return { result: "already_running" };
-
-    let conf    = confFile(name, type);
-    let method  = getStartMethod(name, type);
-    let pf      = pidFile(name);
-    let logFile = `${CFG.log_dir}/${name}.log`;
-    fwApply(name, type, conf);
-
-    let cmdJson;
-    if (type === "vnt") {
-        if (method === "vnt2_web") {
-            let wa = readField(conf, "web_addr");
-            if (!wa) return { result: "error", msg: "未配置 web_addr" };
-            cmdJson = sprintf('["%s/vnt2_web","--addr","%s","--conf","%s"]',
-                CFG.bin_path, wa, conf);
-        } else {
-            cmdJson = sprintf('["%s/vnt2_cli","--conf","%s"]',
-                CFG.bin_path, conf);
-        }
-    } else if (type === "vnts") {
-        cmdJson = sprintf('["%s/vnts2","-c","%s"]',
-            CFG.bin_path, conf);
-    } else {
-        return { result: "error", msg: "未知实例类型" };
+    if (!type) return { result: "error", msg: "配置文件不存在" };
+    let uci = cursor();
+    uci.load("vnt2");
+    let sid = null;
+    uciEach(uci, type, (s, sec) => {
+        if (sec.name === name) { sid = s; return false; }
+    });
+    if (!sid) {
+        sid = `cfg_${type}_${name}`;
+        uci.set("vnt2", sid, type);
+        uci.set("vnt2", sid, "name", name);
     }
-
-    let ubusJson = sprintf(
-        '{"name":"vnt2","instances":{"%s":{"command":%s,"respawn":{"threshold":3600,"timeout":5,"retry":5},"pidfile":"%s","stdout":true,"stderr":true}}}',
-        name, cmdJson, pf
-    );
-    system(`ubus call service add '${ubusJson}' 2>/dev/null`);
-    system("sleep 2");
-    let pid = trim(safeRead(pf));
-    if (pidAlive(pid)) return { result: "ok", pid };
-
-    let fallbackCmd;
-    if (type === "vnt") {
-        if (method === "vnt2_web") {
-            let wa = readField(conf, "web_addr");
-            if (!wa) return { result: "error", msg: "启动失败" };
-            fallbackCmd = `${CFG.bin_path}/vnt2_web --addr ${wa} --conf ${conf}`;
-        } else {
-            fallbackCmd = `${CFG.bin_path}/vnt2_cli --conf ${conf}`;
-        }
-    } else {
-        fallbackCmd = `${CFG.bin_path}/vnts2 -c ${conf}`;
-    }
-    system(`sh -c '${fallbackCmd} >> "${logFile}" 2>&1 & echo $! > "${pf}"'`);
-    system("sleep 1");
-    pid = trim(safeRead(pf));
-    if (pidAlive(pid)) return { result: "ok", pid };
-    unlink(pf);
-    return { result: "error", msg: "启动失败" };
-}
-
-function doStop(name) {
-    if (!isRunning(name)) return { result: "not_running" };
-    let pid  = readPid(name);
-    let type = getType(name);
-    let conf = confFile(name, type);
-    system(`ubus call service delete '{"name":"vnt2","instance":"${name}"}' 2>/dev/null`);
-    system("sleep 1");
-    if (pidAlive(pid)) {
-        system(`pkill -f '${conf}' 2>/dev/null`);
-        system("sleep 1");
-        if (pidAlive(pid)) system(`kill -9 ${pid} 2>/dev/null`);
-    }
-    unlink(pidFile(name));
+    uci.set("vnt2", sid, "enabled", "1");
+    uci.commit("vnt2");
+    system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
 function doRestart(name) {
-    doStop(name);
-    return doStart(name);
+    let pid = readPid(name);
+    if (!pid || !pidAlive(pid)) return doStart(name);
+    system(`kill ${pid} 2>/dev/null`);
+    return { result: "ok" };
+}
+
+function doStop(name) {
+    if (!isRunning(name)) return { result: "not_running" };
+    let type = getType(name);
+    let uci  = cursor();
+    uci.load("vnt2");
+    uciEach(uci, type, (sid, sec) => {
+        if (sec.name === name) {
+            uci.set("vnt2", sid, "enabled", "0");
+            return false;
+        }
+    });
+    uci.commit("vnt2");
+    system(`ubus call service delete '{"name":"vnt2","instance":"${name}"}' >/dev/null 2>&1`);
+    unlink(pidFile(name));
+    return { result: "ok" };
 }
 
 function cmdGetLog(args) {
     initPaths();
     let name    = args.name;
-    let lines   = int(args.lines) || 200;
+    let lines   = args.lines != null ? int(args.lines) : null;
     let logFile = `${CFG.log_dir}/${name}.log`;
-    let parts   = [];
-    if (fileExists(logFile)) {
-        let fileOut = execOutput(`tail -n ${lines} '${logFile}' 2>/dev/null`);
-        if (fileOut && trim(fileOut))
-            push(parts, trim(fileOut));
-    }
-    let pid = trim(safeRead(pidFile(name)));
-    if (pid && pidAlive(pid)) {
-        let logOut = execOutput(
-            `logread 2>/dev/null | grep -F "[${pid}]" | tail -n ${lines}`
-        );
-        if (logOut && trim(logOut))
-            push(parts, trim(logOut));
-    }
-    return { content: join("\n", parts) };
+    if (!fileExists(logFile)) return { content: "" };
+    let cmd = (lines != null && lines > 0)
+        ? `tail -n ${lines} '${logFile}' 2>/dev/null`
+        : `cat '${logFile}' 2>/dev/null`;
+    return { content: trim(execOutput(cmd)) };
 }
 
 function cmdClearLog(args) {
     initPaths();
-    let name    = args.name;
-    let logFile = `${CFG.log_dir}/${name}.log`;
+    let logFile = `${CFG.log_dir}/${args.name}.log`;
     if (fileExists(logFile)) {
         let f = open(logFile, "w");
         if (f) f.close();
-    }
-    return { result: "ok" };
-}
-
-function cmdGetEnabled(args) {
-    initPaths();
-    let type     = args.type;
-    let names    = getActualNames(type);
-    let uci      = cursor();
-    uci.load("vnt2");
-    let uciState = {};
-    uciEach(uci, type, (sid, s) => {
-        if (s.name) uciState[s.name] = {
-            enabled:      s.enabled === "1",
-            start_method: s.start_method || START_METHODS[type],
-            method_set:   s.method_set === "1",
-        };
-    });
-    let configs = [];
-    for (let i = 0; i < length(names); i++) {
-        let name     = names[i];
-        let s        = uciState[name] ?? {
-            enabled:      false,
-            start_method: START_METHODS[type],
-            method_set:   false,
-        };
-        let web_addr = (type === "vnt")
-            ? readField(confFile(name, type), "web_addr") : "";
-        push(configs, {
-            name,
-            enabled:      s.enabled,
-            start_method: s.start_method,
-            method_set:   s.method_set,
-            web_addr,
-        });
-    }
-    return { configs };
-}
-
-function cmdSetEnabled(args) {
-    let cfgType = args.type;
-    let uci     = cursor();
-    uci.load("vnt2");
-    let old = [];
-    uciEach(uci, cfgType, (sid) => push(old, sid));
-    for (let i = 0; i < length(old); i++)
-        uci.delete("vnt2", old[i]);
-    let actualNames = getActualNames(cfgType);
-    let actualSet   = {};
-    for (let i = 0; i < length(actualNames); i++)
-        actualSet[actualNames[i]] = true;
-    let list = (type(args.configs) === "array") ? args.configs : [];
-    let idx  = 0;
-    for (let i = 0; i < length(list); i++) {
-        let item = list[i];
-        if (!item.name || !actualSet[item.name]) continue;
-        let sid = `cfg_${cfgType}_${idx}`;
-        uci.set("vnt2", sid, cfgType);
-        uci.set("vnt2", sid, "name",         item.name);
-        uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
-        uci.set("vnt2", sid, "start_method",
-                item.start_method || START_METHODS[cfgType]);
-        uci.set("vnt2", sid, "method_set",   "1");
-        idx++;
-    }
-    uci.commit("vnt2");
-    for (let i = 0; i < length(list); i++) {
-        let item = list[i];
-        if (!item.name || !actualSet[item.name]) continue;
-        if (item.enabled) {
-            if (!isRunning(item.name)) doStart(item.name);
-        } else {
-            if (isRunning(item.name))  doStop(item.name);
-        }
     }
     return { result: "ok" };
 }
@@ -648,7 +357,6 @@ function parseTemplateFields(content) {
             push(pending, text);
             continue;
         }
-
         let tbl = match(line, /^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/);
         if (tbl) {
             let fullComment = join(" ", pending);
@@ -665,11 +373,10 @@ function parseTemplateFields(content) {
             pending = [];
             continue;
         }
-
         let eqIdx = index(line, "=");
         if (eqIdx < 0) { pending = []; continue; }
-        let key    = trim(substr(line, 0, eqIdx));
-        let rawVal = trim(substr(line, eqIdx + 1));
+        let key         = trim(substr(line, 0, eqIdx));
+        let rawVal      = trim(substr(line, eqIdx + 1));
         let fullComment = join(" ", pending);
         let typeM       = match(fullComment, /\[(\w+)\]/);
         let fieldType   = typeM ? typeM[1] : inferType(rawVal);
@@ -684,13 +391,12 @@ function parseTemplateFields(content) {
                 if (v) push(options, v);
             }
         }
-
         push(fields, {
             name:      key,
             type:      fieldType,
             "default": parseDefaultValue(rawVal, fieldType),
             comment:   trim(replace(replace(fullComment, /\[\w+\]/g, ""), /\s+/g, " ")),
-            options:   options,
+            options,
         });
         pending = [];
     }
@@ -715,13 +421,14 @@ function cmdSaveConfig(args) {
     let oldName = (args.old_name && args.old_name !== "") ? args.old_name : args.name;
     let name    = args.name;
     let type    = args.type;
+
     if (oldName !== name) {
-        fwRemove(oldName);
+        doStop(oldName);
         unlink(confFile(oldName, type));
         let uci      = cursor();
         uci.load("vnt2");
         let toDelete = [];
-        uciEach(uci, type, function(sid, s) {
+        uciEach(uci, type, (sid, s) => {
             if (s.name === oldName) push(toDelete, sid);
         });
         for (let i = 0; i < length(toDelete); i++)
@@ -737,11 +444,10 @@ function cmdSaveConfig(args) {
 function cmdDeleteConfig(args) {
     initPaths();
     doStop(args.name);
-    fwRemove(args.name);
     let file = confFile(args.name, args.type);
     if (!fileExists(file)) return { result: "error", msg: "文件不存在" };
     unlink(file);
-    let uci = cursor();
+    let uci      = cursor();
     uci.load("vnt2");
     let toDelete = [];
     uciEach(uci, args.type, (sid, s) => {
@@ -749,8 +455,7 @@ function cmdDeleteConfig(args) {
     });
     for (let i = 0; i < length(toDelete); i++)
         uci.delete("vnt2", toDelete[i]);
-    if (length(toDelete) > 0)
-        uci.commit("vnt2");
+    if (length(toDelete)) uci.commit("vnt2");
     return { result: "ok" };
 }
 
@@ -763,34 +468,41 @@ function fetchWebApi(webAddr, path) {
     return raw ? json(raw) : null;
 }
 
+function fmtBytes(b) {
+    if (!b || b <= 0) return '0 B';
+    let units = ['B', 'KB', 'MB', 'GB'];
+    let idx   = 0;
+    let v     = b;
+    while (v >= 1024 && idx < 3) { v /= 1024; idx++; }
+    return sprintf("%.2f %s", v, units[idx]);
+}
+
 function fmtWebInfo(d) {
     if (!d) return "获取失败";
     let lines  = [];
     let fields = [
-        ["名称",     d.name                                                         ],
-        ["虚拟IP",   d.ip ? d.ip + (d.prefix_len ? '/' + d.prefix_len : '') : null ],
-        ["网关",     d.gateway                                                      ],
-        ["状态",     d.status                                                       ],
-        ["NAT类型",  d.nat_type                                                     ],
-        ["MTU",      d.mtu                                                          ],
-        ["网络代码", d.network_code                                                 ],
+        ["名称",     d.name                                                          ],
+        ["虚拟IP",   d.ip ? d.ip + (d.prefix_len ? '/' + d.prefix_len : '') : null  ],
+        ["网关",     d.gateway                                                       ],
+        ["状态",     d.status                                                        ],
+        ["NAT类型",  d.nat_type                                                      ],
+        ["MTU",      d.mtu                                                           ],
+        ["网络代码", d.network_code                                                  ],
         ["公网IPv4", (d.public_ipv4s && length(d.public_ipv4s))
-                     ? join(', ', d.public_ipv4s) : null                            ],
-        ["公网IPv6", d.public_ipv6                                                  ],
-        ["版本",     d.version                                                      ],
-        ["在线节点", d.online_client_num  || '0'                                    ],
-        ["离线节点", d.offline_client_num || '0'                                    ],
+                     ? join(', ', d.public_ipv4s) : null                             ],
+        ["公网IPv6", d.public_ipv6                                                   ],
+        ["版本",     d.version                                                       ],
+        ["在线节点", d.online_client_num  || '0'                                     ],
+        ["离线节点", d.offline_client_num || '0'                                     ],
     ];
     for (let i = 0; i < length(fields); i++)
         push(lines, sprintf("%-8s %s", fields[i][0] + ':', fields[i][1] || '-'));
-
     let feats = [];
     if (d.encrypt)  push(feats, '加密');
     if (d.compress) push(feats, '压缩');
     if (d.fec)      push(feats, 'FEC');
     if (d.rtx)      push(feats, 'RTX');
     push(lines, sprintf("%-8s %s", '功能:', length(feats) ? join(' ', feats) : '无'));
-
     if (d.server_info && length(d.server_info)) {
         push(lines, "\n── 服务器 ──");
         for (let i = 0; i < length(d.server_info); i++) {
@@ -803,13 +515,13 @@ function fmtWebInfo(d) {
     return join("\n", lines);
 }
 
-function fmtBytes(b) {
-    if (!b || b <= 0) return '0 B';
-    let units = ['B', 'KB', 'MB', 'GB'];
-    let idx   = 0;
-    let v     = b;
-    while (v >= 1024 && idx < 3) { v /= 1024; idx++; }
-    return sprintf("%.2f %s", v, units[idx]);
+function fmtWebIps(d) {
+    if (!d) return "获取失败";
+    return join("\n", [
+        "虚拟IP: " + (d.ip || '-') + (d.prefix_len ? '/' + d.prefix_len : ''),
+        "网关:   " + (d.gateway   || '-'),
+        "设备ID: " + (d.device_id || '-'),
+    ]);
 }
 
 function fmtWebClients(peers) {
@@ -826,7 +538,6 @@ function fmtWebClients(peers) {
         ];
         for (let j = 0; j < length(basic); j++)
             push(lines, sprintf("%-6s %s", basic[j][0] + ':', basic[j][1] || '-'));
-
         let nat = p.nat_info;
         if (nat) {
             push(lines, sprintf("%-6s %s", 'NAT类型:', nat.nat_type || '-'));
@@ -835,10 +546,9 @@ function fmtWebClients(peers) {
             if (nat.ipv6)
                 push(lines, sprintf("%-6s %s", 'IPv6:', nat.ipv6));
         }
-
         let pl = p.packet_loss;
         if (pl) {
-            let rate = pl.loss_rate != null
+            let rate     = pl.loss_rate != null
                 ? sprintf("%.2f%%", pl.loss_rate * 100) : '-';
             let plFields = [
                 ["发送",   pl.sent     || 0],
@@ -848,7 +558,6 @@ function fmtWebClients(peers) {
             for (let j = 0; j < length(plFields); j++)
                 push(lines, sprintf("%-6s %s", plFields[j][0] + ':', plFields[j][1]));
         }
-
         let tr = p.traffic;
         if (tr) {
             let trFields = [
@@ -894,6 +603,7 @@ function cmdGetCtrlInfo(args) {
     if (type !== "vnt") return { output: "非客户端实例" };
     let conf   = confFile(name, "vnt");
     let method = getStartMethod(name, "vnt");
+
     if (method === "vnt2_web") {
         let webAddr = readField(conf, "web_addr");
         if (!webAddr) return { output: "未配置 web_addr" };
@@ -901,6 +611,10 @@ function cmdGetCtrlInfo(args) {
             info:    function() {
                 let r = fetchWebApi(webAddr, "/api/info");
                 return (r && r.code === 0) ? fmtWebInfo(r.data) : "获取失败";
+            },
+            ips:     function() {
+                let r = fetchWebApi(webAddr, "/api/info");
+                return (r && r.code === 0) ? fmtWebIps(r.data) : "获取失败";
             },
             clients: function() {
                 let r = fetchWebApi(webAddr, "/api/peers");
@@ -979,6 +693,83 @@ function cmdSaveSettings(args) {
     return { result: "ok" };
 }
 
+function cmdGetEnabled(args) {
+    initPaths();
+    let type     = args.type;
+    let names    = getActualNames(type);
+    let uci      = cursor();
+    uci.load("vnt2");
+    let uciState = {};
+    uciEach(uci, type, (sid, s) => {
+        if (s.name) uciState[s.name] = {
+            enabled:      s.enabled === "1",
+            start_method: s.start_method || START_METHODS[type],
+            method_set:   s.method_set === "1",
+        };
+    });
+    let configs = [];
+    for (let i = 0; i < length(names); i++) {
+        let name     = names[i];
+        let s        = uciState[name] ?? {
+            enabled:      false,
+            start_method: START_METHODS[type],
+            method_set:   false,
+        };
+        let web_addr = (type === "vnt")
+            ? readField(confFile(name, type), "web_addr") : "";
+        push(configs, {
+            name,
+            enabled:      s.enabled,
+            start_method: s.start_method,
+            method_set:   s.method_set,
+            web_addr,
+        });
+    }
+    return { configs };
+}
+
+function cmdSetEnabled(args) {
+    initPaths();
+    let cfgType     = args.type;
+    let uci         = cursor();
+    uci.load("vnt2");
+    let old         = [];
+    uciEach(uci, cfgType, (sid) => push(old, sid));
+    for (let i = 0; i < length(old); i++)
+        uci.delete("vnt2", old[i]);
+
+    let actualNames = getActualNames(cfgType);
+    let actualSet   = {};
+    for (let i = 0; i < length(actualNames); i++)
+        actualSet[actualNames[i]] = true;
+
+    let list = (type(args.configs) === "array") ? args.configs : [];
+    let idx  = 0;
+    for (let i = 0; i < length(list); i++) {
+        let item = list[i];
+        if (!item.name || !actualSet[item.name]) continue;
+        let sid = `cfg_${cfgType}_${idx}`;
+        uci.set("vnt2", sid, cfgType);
+        uci.set("vnt2", sid, "name",         item.name);
+        uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
+        uci.set("vnt2", sid, "start_method",
+                item.start_method || START_METHODS[cfgType]);
+        uci.set("vnt2", sid, "method_set",   "1");
+        idx++;
+    }
+    uci.commit("vnt2");
+    for (let i = 0; i < length(list); i++) {
+        let item = list[i];
+        if (!item.name || !actualSet[item.name]) continue;
+        if (item.enabled) {
+            if (!isRunning(item.name)) doStart(item.name);
+        } else {
+            if (isRunning(item.name))  doStop(item.name);
+        }
+    }
+    return { result: "ok" };
+}
+
 function updStatusFile(p) { return `${DEFAULTS.update_dir}/${p}.status`;    }
 function updLogFile(p)    { return `${DEFAULTS.update_dir}/${p}.log`;       }
 function updSlimFile(p)   { return `${DEFAULTS.update_dir}/${p}.slim.json`; }
@@ -1015,31 +806,22 @@ function cmdGetUpdateStatus(args) {
     let statusF = updStatusFile(project);
     let logF    = updLogFile(project);
     let slimF   = updSlimFile(project);
-
     if (!fileExists(statusF)) return { status: "idle" };
-
     let status  = trim(safeRead(statusF));
     let logTail = fileExists(logF)
         ? trim(execOutput(`tail -n 30 '${logF}' 2>/dev/null`)) : "";
-
     if (status === "checking")
         return { status: "checking", log: logTail };
-
     if (substr(status, 0, 6) === "ready:") {
-        let count    = substr(status, 6);
         let releases = fileExists(slimF) ? json(safeRead(slimF)) : null;
-        return { status: "ready", count, releases, log: logTail };
+        return { status: "ready", count: substr(status, 6), releases, log: logTail };
     }
-
     if (status === "downloading" || status === "installing")
         return { status, log: logTail };
-
     if (substr(status, 0, 5) === "done:")
         return { status: "done", installed: substr(status, 5), log: logTail };
-
     if (substr(status, 0, 6) === "error:")
         return { status: "error", msg: substr(status, 6), log: logTail };
-
     return { status: "idle" };
 }
 
@@ -1068,7 +850,6 @@ const METHODS = {
     get_enabled:          cmdGetEnabled,
     set_enabled:          cmdSetEnabled,
     get_cpu_ticks:        cmdGetCpuTicks,
-    rebuild_firewall:     cmdRebuildFirewall,
 };
 
 const SIGNATURES = {
@@ -1101,6 +882,7 @@ const SIGNATURES = {
         fw_lan_to_vnt:   "Boolean",
         fw_vnt_to_wan:   "Boolean",
         fw_wan_to_vnt:   "Boolean",
+        fw_vnt_web:      "Boolean",
         fw_vnts_web:     "Boolean",
     },
     get_upstream_version: { project: "String", mirror: "String" },
@@ -1109,7 +891,6 @@ const SIGNATURES = {
     get_enabled:          { type: "String" },
     set_enabled:          { type: "String", configs: "String" },
     get_cpu_ticks:        { name: "String" },
-    rebuild_firewall:     {},
 };
 
 let argv = ARGV;

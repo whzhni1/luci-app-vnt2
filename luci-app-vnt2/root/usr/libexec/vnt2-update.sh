@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.0
+# VNT2 更新脚本 v1.1
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -46,11 +46,12 @@ pm_install() {
     return $rc
 }
 
-restart_service() {
-    local name="$1"
-    [ -z "$name" ] && return
-    log "$name" "重启服务: $name"
-    /etc/init.d/vnt2 restart >/dev/null 2>&1
+manage_service() {
+    local action="$1" name="$2"
+    [ -z "$action" ] || [ -z "$name" ] && return
+    [ "$name" = "luci-app-vnt2" ] && return
+    log "$name" "服务操作: $action $name"
+    /etc/init.d/vnt2 "$action" >/dev/null 2>&1
 }
 
 api_url() {
@@ -266,7 +267,7 @@ _install_bin() {
     local ftype
     ftype="$(file_type "$tmp")"
     log "$proj" "文件类型: $ftype"
-
+    manage_service stop "$proj"
     case "$ftype" in
         elf)
             local b; b="$(echo "$bins" | cut -d' ' -f1)"
@@ -300,7 +301,7 @@ _install_bin() {
     rm -f "$tmp"
     if [ -n "$installed" ]; then
         log "$proj" "安装完成: $installed"
-        restart_service "$proj"
+        manage_service restart "$proj"
         set_status "$proj" "done:$installed"
     else
         log "$proj" "未找到可安装文件"

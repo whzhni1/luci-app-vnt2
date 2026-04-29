@@ -103,6 +103,7 @@ return view.extend({
         var instances   = (data[2] && Array.isArray(data[2].instances))
             ? data[2].instances : [];
         self._instances = instances;
+
         instances.forEach(function(inst) {
             if (!inst.running) return;
             callGetCpuTicks(inst.name).then(function(r) {
@@ -142,10 +143,13 @@ return view.extend({
             }, linkNodes)
         ]);
 
-        if (self._selectedInstance)
+        if (self._selectedInstance && instances.some(function(i) {
+            return i.name === self._selectedInstance && i.running;
+        })) {
             window.setTimeout(function() {
                 self._loadCtrlTab(self._selectedInstance, 'info');
             }, 300);
+        }
 
         self._pollFn = function() {
             return callListInstances().then(function(r) {
@@ -153,6 +157,7 @@ return view.extend({
             });
         };
         poll.add(self._pollFn, 5);
+
         window.setTimeout(function() {
             var el = document.querySelector('.cbi-page-actions');
             if (el) el.style.display = 'none';
@@ -278,15 +283,79 @@ return view.extend({
 
     _renderCtrlPanel: function(instances) {
         var self = this;
-        var vntInsts = instances.filter(function(i) {
-            return i.type === 'vnt' && i.running;
-        });
-        if (!vntInsts.length)
-            return E('p', { 'style':'color:#888;' }, '暂无运行中的客户端实例。');
+        var wrap = E('div', { 'id':'vnt2-ctrl-panel-wrap' });
+        self._syncCtrlPanelDom(
+            wrap,
+            instances.filter(function(i) { return i.type === 'vnt' && i.running; })
+        );
+        return wrap;
+    },
+
+    _syncCtrlPanelDom: function(wrap, vntInsts) {
+        var self      = this;
+        var hasTip    = !!wrap.querySelector('#vnt2-no-inst-tip');
+        var hasSel    = !!wrap.querySelector('#vnt2-inst-select');
+
+        if (!vntInsts.length) {
+            if (!hasTip) {
+                wrap.innerHTML = '';
+                wrap.appendChild(E('p', {
+                    'id':    'vnt2-no-inst-tip',
+                    'style': 'color:#888;'
+                }, '暂无运行中的客户端实例。'));
+                self._selectedInstance = null;
+            }
+            return;
+        }
+
+        if (!hasSel) {
+            wrap.innerHTML = '';
+            var selValid = vntInsts.some(function(i) { return i.name === self._selectedInstance; });
+            if (!selValid) self._selectedInstance = vntInsts[0].name;
+
+            wrap.appendChild(self._buildCtrlPanelContent(vntInsts));
+
+            window.setTimeout(function() {
+                self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
+            }, 100);
+            return;
+        }
+
+        self._syncInstSelect(vntInsts);
+    },
+
+    _syncInstSelect: function(vntInsts) {
+        var self = this;
+        var sel  = document.getElementById('vnt2-inst-select');
+        if (!sel) return;
+
+        var oldNames = [];
+        for (var i = 0; i < sel.options.length; i++)
+            oldNames.push(sel.options[i].value);
+        var newNames = vntInsts.map(function(i) { return i.name; });
+
+        var changed = oldNames.length !== newNames.length ||
+            newNames.some(function(n, idx) { return n !== oldNames[idx]; });
+        if (!changed) return;
+
         var selValid = vntInsts.some(function(i) { return i.name === self._selectedInstance; });
         if (!selValid) self._selectedInstance = vntInsts[0].name;
 
+        sel.innerHTML = '';
+        vntInsts.forEach(function(inst) {
+            var opt = document.createElement('option');
+            opt.value       = inst.name;
+            opt.textContent = inst.name;
+            if (inst.name === self._selectedInstance) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    },
+
+    _buildCtrlPanelContent: function(vntInsts) {
+        var self = this;
+
         var instSelect = E('select', {
+            'id':     'vnt2-inst-select',
             'class':  'cbi-input-select',
             'style':  'width:auto;',
             'change': function(ev) {
@@ -388,7 +457,9 @@ return view.extend({
             var hasWeb  = !!(inst.web_addr && inst.web_addr !== '');
             var row     = document.getElementById('vnt2-row-' + inst.name);
             if (!row) return;
+
             row.querySelectorAll('td').forEach(function(td) { td.style.color = color; });
+
             var els = getInstEls(inst.name);
             if (els.uptime) els.uptime.textContent = running ? formatUptime(inst.uptime) : '-';
             if (els.pid)    els.pid.textContent    = inst.pid || '-';
@@ -414,6 +485,14 @@ return view.extend({
                 els.web.appendChild(self._buildWebBtn(inst, hasWeb));
             }
         });
+
+        var wrap = document.getElementById('vnt2-ctrl-panel-wrap');
+        if (wrap) {
+            self._syncCtrlPanelDom(
+                wrap,
+                instances.filter(function(i) { return i.type === 'vnt' && i.running; })
+            );
+        }
     },
 
     destroy: function() {

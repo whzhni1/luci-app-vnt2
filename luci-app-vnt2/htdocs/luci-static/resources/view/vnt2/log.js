@@ -11,7 +11,7 @@ var callListInstances = rpcDeclare('list_instances', []);
 var callGetLog        = rpcDeclare('get_log',        ['name','lines']);
 var callClearLog      = rpcDeclare('clear_log',      ['name']);
 
-var LINE_OPTIONS = [100, 200, 500, 1000];
+var LINE_OPTIONS = [100, 200, 500, 1000, 0];
 
 var MONTH_MAP = {
     Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
@@ -140,13 +140,14 @@ return view.extend({
         );
 
         var linesSelect = E('select', {
-            'class': 'cbi-input-select',
-            'id':    'vnt2-log-lines',
-            'style': 'width:auto;'
+            'class':  'cbi-input-select',
+            'id':     'vnt2-log-lines',
+            'style':  'width:auto;',
+            'change': function() { self._loadLog(); }
         }, LINE_OPTIONS.map(function(n) {
-            var a = { 'value':String(n) };
+            var a = { 'value': String(n) };
             if (n === 200) a['selected'] = 'selected';
-            return E('option', a, '最近 ' + n + ' 行');
+            return E('option', a, n === 0 ? '全部' : '最近 ' + n + ' 行');
         }));
 
         var autoCheck = E('input', {
@@ -157,7 +158,7 @@ return view.extend({
 
         var btns = [
             { label:'刷新',     cls:'btn cbi-button-action',  fn: function() { self._loadLog(); }  },
-            { label:'清空缓冲', cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
+            { label:'清理日志', cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
             { label:'滚到顶部', cls:'btn',                     fn: function() { scrollLog(false); } },
             { label:'滚到底部', cls:'btn',                     fn: function() { scrollLog(true);  } },
         ];
@@ -259,14 +260,15 @@ return view.extend({
     },
 
     _loadLog: function() {
-        var self = this;
+        var self    = this;
         if (!self._currentInstance) return;
         var linesEl = document.getElementById('vnt2-log-lines');
         var lines   = linesEl ? parseInt(linesEl.value) : 200;
-        var el      = getLogEl();
+        var linesArg = lines === 0 ? null : lines;
+        var el = getLogEl();
         if (el) el.textContent = '加载中...';
 
-        callGetLog(self._currentInstance, lines).then(function(r) {
+        callGetLog(self._currentInstance, linesArg).then(function(r) {
             var content = (r && r.content) || '';
             if (!content.trim()) {
                 var el2 = getLogEl();
@@ -288,9 +290,6 @@ return view.extend({
     _clearLog: function() {
         var self = this;
         if (!self._currentInstance) return;
-        self._ui.notify(
-        '日志由系统环形缓冲区管理，重启后自动清空',);
-        'info'
         callClearLog(self._currentInstance).then(function() {
             self._loadLog();
         });

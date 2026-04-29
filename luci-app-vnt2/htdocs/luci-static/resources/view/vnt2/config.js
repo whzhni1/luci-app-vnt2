@@ -351,7 +351,7 @@ if (isNew && tab === 'vnt') {
             ])
         ]),
         E('div', { 'class':'vnt2-edit-body' }, formEl),
-        E('div', { 'class':'vnt2-edit-footer' }, [
+        E('div', {'class': 'vnt2-edit-footer', 'style': 'padding-top:60px;display:flex;gap:8px;' }, [
             E('button', { 'class':'btn', 'click':backToList }, '← 返回列表'),
             E('button', {
                 'class': 'btn cbi-button-save',

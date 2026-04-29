@@ -14,12 +14,12 @@ var callCheckBinaries      = rpcDeclare('check_binaries',       []);
 var callGetUpstreamVersion = rpcDeclare('get_upstream_version', ['project', 'mirror']);
 var callGetUpdateStatus    = rpcDeclare('get_update_status',    ['project']);
 var callDoUpdate           = rpcDeclare('do_update',            ['project', 'tag', 'filename', 'upx']);
-var callRebuildFirewall    = rpcDeclare('rebuild_firewall',      []);
 var callSaveSettings       = rpcDeclare('save_settings', [
     'bin_path','config_path','arch','mirror',
     'auto_update','update_interval','upx_compressed',
     'fw_vnt_to_lan','fw_lan_to_vnt',
-    'fw_vnt_to_wan','fw_wan_to_vnt','fw_vnts_web'
+    'fw_vnt_to_wan','fw_wan_to_vnt',
+    'fw_vnt_web','fw_vnts_web'
 ]);
 
 var MIRROR_OPTIONS = [
@@ -41,6 +41,7 @@ var FW_OPTIONS = [
     { key: 'fw_lan_to_vnt', label: 'LAN → VNT', desc: '允许本地局域网访问虚拟网络' },
     { key: 'fw_vnt_to_wan', label: 'VNT → WAN', desc: '允许虚拟网络访问外网'       },
     { key: 'fw_wan_to_vnt', label: 'WAN → VNT', desc: '允许外网访问虚拟网络'       },
+    { key: 'fw_vnt_web',    label: 'VNT Web 外网访问',  desc: '需配置 web_addr'    },
     { key: 'fw_vnts_web',   label: 'VNTS Web 外网访问', desc: '需配置 web_bind'    },
 ];
 
@@ -83,6 +84,7 @@ return view.extend({
             g('fw_lan_to_vnt')             === '1',
             g('fw_vnt_to_wan')             === '1',
             g('fw_wan_to_vnt')             === '1',
+            g('fw_vnt_web')                === '1',
             g('fw_vnts_web')               === '1',
         ];
     },
@@ -98,7 +100,6 @@ return view.extend({
         var self = this;
         return uci.save()
             .then(function() { return ui.changes.apply(); })
-            .then(function() { return callRebuildFirewall(); })
             .then(function() {
                 return callSaveSettings.apply(null, self._getUciSettings());
             });
