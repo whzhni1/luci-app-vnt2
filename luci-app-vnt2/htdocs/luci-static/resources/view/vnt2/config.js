@@ -81,7 +81,7 @@ function saveListState(self) {
             self._ui.notify('部分保存失败', 'error');
             return;
         }
-        self._ui.notify('配置已保存，等待实例状态更新...', 'success');
+        self._ui.notify('配置已保存', 'success');
         return new Promise(function(resolve) {
             window.setTimeout(function() {
                 refreshStatus(self).then(function() {
