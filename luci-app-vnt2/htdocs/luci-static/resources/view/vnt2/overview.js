@@ -7,13 +7,11 @@
 function rpcDeclare(method, params) {
     return rpc.declare({ object:'luci.vnt2', method:method, params:params||[] });
 }
-var callCheckBinaries   = rpcDeclare('check_binaries',   []);
-var callListInstances   = rpcDeclare('list_instances',   []);
-var callStartInstance   = rpcDeclare('start_instance',   ['name']);
-var callStopInstance    = rpcDeclare('stop_instance',    ['name']);
-var callRestartInstance = rpcDeclare('restart_instance', ['name']);
-var callGetCtrlInfo     = rpcDeclare('get_ctrl_info',    ['name','cmd']);
-var callGetCpuTicks     = rpcDeclare('get_cpu_ticks',    ['name']);
+var callCheckBinaries  = rpcDeclare('check_binaries',   []);
+var callListInstances  = rpcDeclare('list_instances',   []);
+var callInstanceAction = rpcDeclare('instance_action',  ['name', 'action']);
+var callGetCtrlInfo    = rpcDeclare('get_ctrl_info',    ['name', 'cmd']);
+var callGetCpuTicks    = rpcDeclare('get_cpu_ticks',    ['name']);
 
 var CTRL_TABS = [
     { id:'info',    label:'基本信息' },
@@ -37,9 +35,9 @@ var LINKS = [
 ];
 
 var ACTIONS = [
-    { id:'start',   label:'启动', needRunning:false, fn:callStartInstance   },
-    { id:'restart', label:'重启', needRunning:true,  fn:callRestartInstance },
-    { id:'stop',    label:'停止', needRunning:true,  fn:callStopInstance    },
+    { id:'start',   label:'启动', needRunning:false },
+    { id:'restart', label:'重启', needRunning:true  },
+    { id:'stop',    label:'停止', needRunning:true  },
 ];
 
 var _lastTicks = {};
@@ -85,6 +83,15 @@ function formatUptime(seconds) {
     return parts.join('');
 }
 
+function refreshList(self) {
+    return callListInstances().then(function(r) {
+        var list = (r && Array.isArray(r.instances)) ? r.instances : [];
+        self._instances = list;
+        self._refreshRows(list);
+        return list;
+    });
+}
+
 return view.extend({
     load: function() {
         return Promise.all([
@@ -95,7 +102,7 @@ return view.extend({
     },
 
     render: function(data) {
-        var self      = this;
+        var self        = this;
         self._destroyed = false;
         _lastTicks      = {};
         self._ui        = data[0].VNT2UI;
@@ -127,9 +134,38 @@ return view.extend({
             E('h2', {}, 'VNT2 概览'),
             self._renderBinaryAlert(binaries),
             E('div', { 'class':'cbi-section' }, [
-                E('h3', {}, '实例运行状态'),
-                self._renderInstanceTable(instances)
+            E('div', { 'style':'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;' }, [
+                E('h3', { 'style':'margin:0;' }, [
+                    E('span', {}, '实例运行状态 '),
+                    E('span', {
+                        'data-role': 'run-status',
+                        'style':     'font-size:13px;font-weight:normal;color:#28a745;'
+                    }, instances.filter(function(i){ return i.running; }).length + ' 个运行中'),
+                    E('span', {
+                        'data-role': 'run-total',
+                        'style':     'font-size:13px;font-weight:normal;color:#aaa;'
+                    }, ' / ' + instances.length + ' 个')
+                ]),
+                E('div', { 'style':'display:flex;gap:6px;' }, [
+                    E('button', {
+                        'class': 'btn cbi-button-action',
+                        'style': 'padding:3px 10px;font-size:12px;',
+                        'click': function() { self._doBatchAction('start'); }
+                    }, '全部启动'),
+                    E('button', {
+                        'class': 'btn cbi-button-action',
+                        'style': 'padding:3px 10px;font-size:12px;',
+                        'click': function() { self._doBatchAction('restart'); }
+                    }, '全部重启'),
+                    E('button', {
+                        'class': 'btn cbi-button',
+                        'style': 'padding:3px 10px;font-size:12px;color:#dc3545;border-color:#dc3545;',
+                        'click': function() { self._doBatchAction('stop'); }
+                    }, '全部停止'),
+                ])
             ]),
+            self._renderInstanceTable(instances)
+        ]),
             E('div', { 'class':'cbi-section' }, [
                 E('h3', {}, '节点信息'),
                 self._renderCtrlPanel(instances)
@@ -241,8 +277,8 @@ return view.extend({
                 'class':    'btn cbi-button' + (disabled ? '' : '-action'),
                 'disabled': disabled ? 'disabled' : null,
                 'style':    'padding:2px 8px;font-size:12px;',
-                'click':    disabled ? null : function() {
-                    self._doAction(act, inst.name);
+                'click':    function() {
+                    if (!disabled) self._doAction(act, inst.name);
                 }
             }, act.label));
         });
@@ -264,7 +300,7 @@ return view.extend({
 
     _doAction: function(act, name) {
         var self = this;
-        act.fn(name).then(function(result) {
+        callInstanceAction(name, act.id).then(function(result) {
             var ok = act.id === 'stop'
                 ? result && (result.result === 'ok' || result.result === 'not_running')
                 : result && result.result === 'ok';
@@ -273,11 +309,45 @@ return view.extend({
                 (ok ? ' 成功' : ' 失败：' + ((result && result.msg) || '未知错误')),
                 ok ? 'success' : 'error'
             );
-            callListInstances().then(function(r) {
-                self._refreshRows((r && Array.isArray(r.instances)) ? r.instances : []);
-            });
+            refreshList(self);
         }).catch(function(err) {
             self._ui.notify('操作失败：' + String(err), 'error');
+        });
+    },
+
+    _doBatchAction: function(actId) {
+        var self = this;
+        var act  = ACTIONS.filter(function(a) { return a.id === actId; })[0];
+        if (!act) return;
+
+        callInstanceAction(null, actId).then(function(r) {
+            var results = (r && Array.isArray(r.results)) ? r.results : [];
+            if (!results.length && r && r.result === 'ok') {
+                self._ui.notify('全部 ' + act.label + ' 指令已发送', 'success');
+                refreshList(self);
+                return;
+            }
+
+            if (!results.length) {
+                self._ui.notify(
+                    '没有' + (act.needRunning ? '运行中' : '已停止') + '的实例可供' + act.label,
+                    'error'
+                );
+                return;
+            }
+
+            var failed = results.filter(function(item) { return item.result !== 'ok'; });
+            self._ui.notify(
+                failed.length
+                    ? act.label + ' 部分失败：' + failed.map(function(item) {
+                        return '"' + item.name + '"' + (item.msg ? '：' + item.msg : '');
+                    }).join('、')
+                    : '全部 ' + act.label + ' 成功（共 ' + results.length + ' 个）',
+                failed.length ? 'error' : 'success'
+            );
+            refreshList(self);
+        }).catch(function(err) {
+            self._ui.notify('批量' + act.label + '失败：' + String(err), 'error');
         });
     },
 
@@ -292,9 +362,9 @@ return view.extend({
     },
 
     _syncCtrlPanelDom: function(wrap, vntInsts) {
-        var self      = this;
-        var hasTip    = !!wrap.querySelector('#vnt2-no-inst-tip');
-        var hasSel    = !!wrap.querySelector('#vnt2-inst-select');
+        var self   = this;
+        var hasTip = !!wrap.querySelector('#vnt2-no-inst-tip');
+        var hasSel = !!wrap.querySelector('#vnt2-inst-select');
 
         if (!vntInsts.length) {
             if (!hasTip) {
@@ -312,9 +382,7 @@ return view.extend({
             wrap.innerHTML = '';
             var selValid = vntInsts.some(function(i) { return i.name === self._selectedInstance; });
             if (!selValid) self._selectedInstance = vntInsts[0].name;
-
             wrap.appendChild(self._buildCtrlPanelContent(vntInsts));
-
             window.setTimeout(function() {
                 self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
             }, 100);
@@ -451,6 +519,7 @@ return view.extend({
 
     _refreshRows: function(instances) {
         var self = this;
+
         instances.forEach(function(inst) {
             var running = !!inst.running;
             var color   = runningColor(running);
@@ -486,6 +555,11 @@ return view.extend({
             }
         });
 
+        var runCount = instances.filter(function(i) { return i.running; }).length;
+        var statusEl = document.querySelector('[data-role="run-status"]');
+        var totalEl  = document.querySelector('[data-role="run-total"]');
+        if (statusEl) statusEl.textContent = runCount + ' 个运行中';
+        if (totalEl)  totalEl.textContent  = ' / ' + instances.length + ' 个';
         var wrap = document.getElementById('vnt2-ctrl-panel-wrap');
         if (wrap) {
             self._syncCtrlPanelDom(

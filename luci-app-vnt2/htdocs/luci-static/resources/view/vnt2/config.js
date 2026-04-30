@@ -17,7 +17,7 @@ var callReadTemplate      = rpcDeclare('read_template',       ['type']);
 var callListInstances     = rpcDeclare('list_instances',      []);
 var callSetEnabled        = rpcDeclare('set_enabled',         ['type','configs']);
 var callGetEnabled        = rpcDeclare('get_enabled',         ['type']);
-var callRestartInstance   = rpcDeclare('restart_instance',    ['name']);
+var callInstanceAction  = rpcDeclare('instance_action',  ['name', 'action']);
 
 var TABS          = { vnt:'客户端', vnts:'服务端' };
 var START_METHODS = { vnt:['vnt2_cli','vnt2_web'], vnts:['vnts2'] };
@@ -85,7 +85,6 @@ function saveListState(self) {
         return new Promise(function(resolve) {
             window.setTimeout(function() {
                 refreshStatus(self).then(function() {
-                    self._ui.notify('实例状态已更新', 'success');
                     resolve();
                 });
             }, 3000);
@@ -635,68 +634,67 @@ function validate(fields, formEl) {
 }
 
 function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent) {
-var collected = collectValues(formEl);
-    console.log('[save] collected:', JSON.stringify(collected));
-var content = self._parser.serializeToToml(fields, collected, templateContent);
-    console.log('[save] serialized content:\n', content);
-
-    var errors = validate(fields, formEl);
-    if (errors.length) {
-        self._ui.notify('以下必填项未填写：' + errors.join('、'), 'error');
-        var first = formEl.querySelector('.vnt2-input-error');
-        if (first) first.scrollIntoView({ behavior:'smooth', block:'center' });
-        return;
-    }
-
-    var content = self._parser.serializeToToml(fields, collectValues(formEl), templateContent);
-    var renamed = !!(oldName && oldName !== newName);
-    callSaveConfig(newName, tab, content, oldName || '').then(function(r) {
-        if (!r || r.result !== 'ok') {
-            self._ui.notify('保存失败：' + ((r && r.msg) || ''), 'error');
+    loadListState(tab).then(function() {
+        var errors = validate(fields, formEl);
+        if (errors.length) {
+            self._ui.notify('以下必填项未填写：' + errors.join('、'), 'error');
+            var first = formEl.querySelector('.vnt2-input-error');
+            if (first) first.scrollIntoView({ behavior:'smooth', block:'center' });
             return;
         }
 
-        if (renamed) {
-            _listState[tab][newName] = _listState[tab][oldName] || ensureState(tab, newName);
-            delete _listState[tab][oldName];
-        }
+        var content = self._parser.serializeToToml(fields, collectValues(formEl), templateContent);
+        var renamed = !!(oldName && oldName !== newName);
 
-        _dirty = false;
-        self._ui.notify('配置 "' + newName + '" 保存成功', 'success');
+        callSaveConfig(newName, tab, content, oldName || '').then(function(r) {
+            if (!r || r.result !== 'ok') {
+                self._ui.notify('保存失败：' + ((r && r.msg) || ''), 'error');
+                return;
+            }
 
-        if (tab === 'vnt') {
-            var webReady = self._parser.hasWebAddr(content);
-            var st       = ensureState(tab, newName);
-            st._cfgWebAddr  = webReady ? '1' : '';
-            st.start_method = webReady ? 'vnt2_web' : 'vnt2_cli';
-            st._methodSet   = true;
-        }
+            if (renamed) {
+                _listState[tab][newName] = _listState[tab][oldName] || ensureState(tab, newName);
+                delete _listState[tab][oldName];
+            }
 
-        var state = _listState[tab][newName] || ensureState(tab, newName);
-        if (state.enabled) {
-            self._ui.notify('实例已启用，正在重启...', 'success');
-            callRestartInstance(newName).then(function(res) {
-                var ok = res && res.result === 'ok';
-                self._ui.notify(
-                    ok ? '实例 "' + newName + '" 重启成功'
-                       : '重启失败：' + ((res && res.msg) || '未知错误'),
-                    ok ? 'success' : 'error'
-                );
-            }).catch(function(err) {
-                self._ui.notify('重启出错：' + String(err), 'error');
-            });
-        }
+            _dirty = false;
+            self._ui.notify('配置 "' + newName + '" 保存成功', 'success');
 
-        return Promise.all([callListConfigs(tab), refreshStatus(self)])
-            .then(function(res) {
-                self._configs[tab] = (res[0] && Array.isArray(res[0].configs))
-                    ? res[0].configs : [];
-                ensureState(tab, newName);
-                rebuildTable(self);
-                showList();
-            });
-    }).catch(function(err) {
-        self._ui.notify('保存出错：' + String(err), 'error');
+            if (tab === 'vnt') {
+                var webReady = self._parser.hasWebAddr(content);
+                var st       = ensureState(tab, newName);
+                st._cfgWebAddr  = webReady ? '1' : '';
+                st.start_method = webReady ? 'vnt2_web' : 'vnt2_cli';
+                st._methodSet   = true;
+            }
+
+            var state = _listState[tab][newName] || ensureState(tab, newName);
+            if (state.enabled) {
+                self._ui.notify('实例已启用，正在重启...', 'success');
+                callInstanceAction(newName, 'restart').then(function(res) {
+                    var ok = res && res.result === 'ok';
+                    self._ui.notify(
+                        ok ? '实例 "' + newName + '" 重启成功'
+                           : '重启失败：' + ((res && res.msg) || '未知错误'),
+                        ok ? 'success' : 'error'
+                    );
+                }).catch(function(err) {
+                    self._ui.notify('重启出错：' + String(err), 'error');
+                });
+            }
+
+            return Promise.all([callListConfigs(tab), refreshStatus(self)])
+                .then(function(res) {
+                    self._configs[tab] = (res[0] && Array.isArray(res[0].configs))
+                        ? res[0].configs : [];
+                    ensureState(tab, newName);
+                    rebuildTable(self);
+                    showList();
+                    saveListState(self);
+                });
+        }).catch(function(err) {
+            self._ui.notify('保存出错：' + String(err), 'error');
+        });
     });
 }
 

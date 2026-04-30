@@ -333,10 +333,14 @@ pick_latest() {
     [ -n "$LATEST_FILE" ]
 }
 
+extract_version() {
+    grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+}
+
 installed_version() {
     local bin="$1"
     [ ! -x "$bin" ] && echo "" && return
-    "$bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+    "$bin" --version 2>/dev/null | extract_version
 }
 
 auto_update_one() {
@@ -350,13 +354,20 @@ auto_update_one() {
         return 1
     }
 
-    local latest_ver cur_ver
-    latest_ver="$(echo "$LATEST_TAG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    local latest_ver cur_ver raw_ver
+    latest_ver="$(echo "$LATEST_TAG" | extract_version)"
 
     case "$proj" in
-        vnt)           cur_ver="$(installed_version "$BIN_PATH/vnt2_cli")" ;;
-        vnts)          cur_ver="$(installed_version "$BIN_PATH/vnts2")"    ;;
-        luci-app-vnt2) cur_ver=""                                          ;;
+        vnt)  cur_ver="$(installed_version "$BIN_PATH/vnt2_cli")" ;;
+        vnts) cur_ver="$(installed_version "$BIN_PATH/vnts2")"    ;;
+        luci-app-vnt2)
+            case "$PM" in
+                apk)  raw_ver="$(apk info luci-app-vnt2 2>/dev/null | head -1)" ;;
+                opkg) raw_ver="$(opkg info luci-app-vnt2 2>/dev/null | grep '^Version:')" ;;
+                *)    raw_ver="" ;;
+            esac
+            cur_ver="$(echo "$raw_ver" | extract_version)"
+            ;;
     esac
 
     log "$proj" "本地: ${cur_ver:-未安装}  上游: ${latest_ver:-未知}"
@@ -373,11 +384,7 @@ auto_update_one() {
 
 cmd_auto_update() {
     load_uci
-
-    [ "$AUTO_UPDATE" != "1" ] && { echo "自动更新未启用"; exit 0; }
-
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始自动更新 mirror=$MIRROR arch=$ARCH"
-
     for proj in vnt vnts luci-app-vnt2; do
         auto_update_one "$proj" || true
         echo "[$proj] $(cat "$(status_file "$proj")" 2>/dev/null)"

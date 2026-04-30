@@ -219,48 +219,35 @@ function instanceInfo(name) {
     return { name, type: type ?? "unknown", running, pid, web_addr, uptime, mem };
 }
 
-function doStart(name) {
+function instanceAction(name, action) {
     initPaths();
-    let type = getType(name);
-    if (!type) return { result: "error", msg: "配置文件不存在" };
-    let uci = cursor();
-    uci.load("vnt2");
-    let sid = null;
-    uciEach(uci, type, (s, sec) => {
-        if (sec.name === name) { sid = s; return false; }
-    });
-    if (!sid) {
-        sid = `cfg_${type}_${name}`;
-        uci.set("vnt2", sid, type);
-        uci.set("vnt2", sid, "name", name);
-    }
-    uci.set("vnt2", sid, "enabled", "1");
-    uci.commit("vnt2");
-    system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
-    return { result: "ok" };
-}
-
-function doRestart(name) {
-    let pid = readPid(name);
-    if (!pid || !pidAlive(pid)) return doStart(name);
-    system(`kill ${pid} 2>/dev/null`);
-    return { result: "ok" };
-}
-
-function doStop(name) {
-    if (!isRunning(name)) return { result: "not_running" };
-    let type = getType(name);
-    let uci  = cursor();
-    uci.load("vnt2");
-    uciEach(uci, type, (sid, sec) => {
-        if (sec.name === name) {
-            uci.set("vnt2", sid, "enabled", "0");
-            return false;
+    if (name && action === "restart") {
+        let pid = readPid(name);
+        if (pid && pidAlive(pid)) {
+            system(`kill ${pid} 2>/dev/null`);
+            return { result: "ok" };
         }
-    });
-    uci.commit("vnt2");
-    system(`ubus call service delete '{"name":"vnt2","instance":"${name}"}' >/dev/null 2>&1`);
-    unlink(pidFile(name));
+        action = "start"; 
+    }
+    if (name) {
+        let type = getType(name);
+        if (!type) return { result: "error", msg: "配置文件不存在" };
+        let uci = cursor();
+        uci.load("vnt2");
+        let sid = null;
+        uciEach(uci, type, (s, sec) => {
+            if (sec.name === name) { sid = s; return false; }
+        });
+        if (!sid) {
+            sid = `cfg_${type}_${name}`;
+            uci.set("vnt2", sid, type);
+            uci.set("vnt2", sid, "name", name);
+        }
+        uci.set("vnt2", sid, "enabled", action === "start" ? "1" : "0");
+        uci.commit("vnt2");
+        action = "start"; 
+    }
+    system(`nohup setsid ${DEFAULTS.init_script} ${action} >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
@@ -422,28 +409,31 @@ function cmdSaveConfig(args) {
     let name    = args.name;
     let type    = args.type;
 
+    if (!writeFile(confFile(name, type), args.content))
+        return { result: "error", msg: "写入失败" };
+
     if (oldName !== name) {
-        doStop(oldName);
-        unlink(confFile(oldName, type));
-        let uci      = cursor();
+        let uci = cursor();
         uci.load("vnt2");
-        let toDelete = [];
         uciEach(uci, type, (sid, s) => {
-            if (s.name === oldName) push(toDelete, sid);
+            if (s.name === oldName) {
+                uci.set("vnt2", sid, "name", name);
+                return false;
+            }
         });
-        for (let i = 0; i < length(toDelete); i++)
-            uci.delete("vnt2", toDelete[i]);
-        if (length(toDelete)) uci.commit("vnt2");
+        uci.commit("vnt2");
+        unlink(confFile(oldName, type));
+        system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
+    } else {
+        if (isRunning(name)) instanceAction(name, "restart");
     }
 
-    return writeFile(confFile(name, type), args.content)
-        ? { result: "ok" }
-        : { result: "error", msg: "写入失败" };
+    return { result: "ok" };
 }
 
 function cmdDeleteConfig(args) {
     initPaths();
-    doStop(args.name);
+    instanceAction(args.name, "stop");
     let file = confFile(args.name, args.type);
     if (!fileExists(file)) return { result: "error", msg: "文件不存在" };
     unlink(file);
@@ -737,12 +727,10 @@ function cmdSetEnabled(args) {
     uciEach(uci, cfgType, (sid) => push(old, sid));
     for (let i = 0; i < length(old); i++)
         uci.delete("vnt2", old[i]);
-
     let actualNames = getActualNames(cfgType);
     let actualSet   = {};
     for (let i = 0; i < length(actualNames); i++)
         actualSet[actualNames[i]] = true;
-
     let list = (type(args.configs) === "array") ? args.configs : [];
     let idx  = 0;
     for (let i = 0; i < length(list); i++) {
@@ -750,23 +738,15 @@ function cmdSetEnabled(args) {
         if (!item.name || !actualSet[item.name]) continue;
         let sid = `cfg_${cfgType}_${idx}`;
         uci.set("vnt2", sid, cfgType);
-        uci.set("vnt2", sid, "name",         item.name);
-        uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
+        uci.set("vnt2", sid, "name",        item.name);
+        uci.set("vnt2", sid, "enabled",     item.enabled ? "1" : "0");
         uci.set("vnt2", sid, "start_method",
                 item.start_method || START_METHODS[cfgType]);
-        uci.set("vnt2", sid, "method_set",   "1");
+        uci.set("vnt2", sid, "method_set",  "1");
         idx++;
     }
     uci.commit("vnt2");
-    for (let i = 0; i < length(list); i++) {
-        let item = list[i];
-        if (!item.name || !actualSet[item.name]) continue;
-        if (item.enabled) {
-            if (!isRunning(item.name)) doStart(item.name);
-        } else {
-            if (isRunning(item.name))  doStop(item.name);
-        }
-    }
+    system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
@@ -833,9 +813,7 @@ const METHODS = {
     get_template_fields:  cmdGetTemplateFields,
     save_config:          cmdSaveConfig,
     delete_config:        cmdDeleteConfig,
-    start_instance:       (a) => doStart(a.name),
-    stop_instance:        (a) => doStop(a.name),
-    restart_instance:     (a) => doRestart(a.name),
+    instance_action: (a) => instanceAction(a.name, a.action),
     get_instance_status:  (a) => { initPaths(); return instanceInfo(a.name); },
     get_ctrl_info:        cmdGetCtrlInfo,
     get_log:              cmdGetLog,
@@ -891,6 +869,7 @@ const SIGNATURES = {
     get_enabled:          { type: "String" },
     set_enabled:          { type: "String", configs: "String" },
     get_cpu_ticks:        { name: "String" },
+    instance_action: { name: "String", action: "String" },
 };
 
 let argv = ARGV;

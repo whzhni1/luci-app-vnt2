@@ -159,20 +159,11 @@ apply_fw_forwardings() {
 _collect_instance_ports() {
     local name="$1" type="$2"
     local conf="${CONFIG_PATH}/${name}.${type}"
-    local field val port fields extra_field
-    local fw_vnt_web fw_vnts_web
-    fw_vnt_web=$(uci  -q get vnt2.global.fw_vnt_web)
-    fw_vnts_web=$(uci -q get vnt2.global.fw_vnts_web)
+    local field val port fields
 
     case "$type" in
-        vnt)
-            fields="$VNT_PORT_FIELDS"
-            extra_field=""
-            ;;
-        vnts)
-            fields="$VNTS_PORT_FIELDS"
-            extra_field=""
-            ;;
+        vnt)  fields="$VNT_PORT_FIELDS"  ;;
+        vnts) fields="$VNTS_PORT_FIELDS" ;;
     esac
 
     for field in $fields; do
@@ -199,11 +190,13 @@ apply_fw_ports() {
 
     [ -z "$all_ports" ] && return
 
-    uci set "firewall.${sid}=rule"
-    uci set "firewall.${sid}.name=vnt2_allow_ports"
-    uci set "firewall.${sid}.src=wan"
-    uci set "firewall.${sid}.proto=tcp udp"
-    uci set "firewall.${sid}.target=ACCEPT"
+    uci_fw_rule "$sid" \
+        "type=rule" \
+        "name=vnt2_allow_ports" \
+        "src=wan" \
+        "proto=tcp udp" \
+        "target=ACCEPT"
+
     for port in $all_ports; do
         uci add_list "firewall.${sid}.dest_port=${port}"
     done
@@ -265,14 +258,15 @@ apply_fw_web_redirect() {
         port_range="${min_port}-${max_port}"
     fi
 
-    uci set "firewall.${sid}=redirect"
-    uci set "firewall.${sid}.name=vnt2_web_redirect"
-    uci set "firewall.${sid}.src=wan"
-    uci set "firewall.${sid}.proto=tcp udp"
-    uci set "firewall.${sid}.src_dport=${port_range}"
-    uci set "firewall.${sid}.dest_ip=${lan_ip}"
-    uci set "firewall.${sid}.dest_port=${port_range}"
-    uci set "firewall.${sid}.target=DNAT"
+    uci_fw_rule "$sid" \
+        "type=redirect" \
+        "name=vnt2_web_redirect" \
+        "src=wan" \
+        "proto=tcp udp" \
+        "src_dport=${port_range}" \
+        "dest_ip=${lan_ip}" \
+        "dest_port=${port_range}" \
+        "target=DNAT"
 }
 
 _add_tun_to_zone() {
@@ -406,11 +400,7 @@ stop_service() {
 }
 
 reload_service() {
-    setup_cron
-    rebuild_firewall
-}
-
-update_firewall() {
     init_paths
+    setup_cron
     rebuild_firewall
 }

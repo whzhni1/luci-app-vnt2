@@ -25,11 +25,9 @@
         "write": {
             "ubus": {
                 "luci.vnt2": [
+                    "instance_action",
                     "save_config",
                     "delete_config",
-                    "start_instance",
-                    "stop_instance",
-                    "restart_instance",
                     "clear_log",
                     "save_settings",
                     "do_update",
