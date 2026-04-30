@@ -658,8 +658,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
             }
 
             _dirty = false;
-            self._ui.notify('配置 "' + newName + '" 保存成功', 'success');
-
+            
             if (tab === 'vnt') {
                 var webReady = self._parser.hasWebAddr(content);
                 var st       = ensureState(tab, newName);
