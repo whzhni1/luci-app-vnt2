@@ -13,6 +13,7 @@ UPDATE_SCRIPT="/usr/libexec/vnt2-update.sh"
 CRON_FILE="/etc/crontabs/root"
 FW_ZONE="vnt2_vnt"
 VNT_RUN="/usr/libexec/vnt2-run.sh"
+IFACE_PREFIX="vnt2"
 
 VNT_PORT_FIELDS="tcp_bind quic_bind ws_bind"
 VNTS_PORT_FIELDS="tcp_bind quic_bind ws_bind server_quic_bind"
@@ -41,6 +42,10 @@ read_field() {
 get_tun_name() {
     local conf="${CONFIG_PATH}/${1}.${2}"
     [ -f "$conf" ] && read_field "$conf" "tun_name"
+}
+
+iface_sid() {
+    printf '%s_%s' "$IFACE_PREFIX" "$1" | tr -cd 'a-zA-Z0-9_' | cut -c1-15
 }
 
 extract_port() {
@@ -127,6 +132,50 @@ uci_fw_rule() {
     done
 }
 
+_create_iface() {
+    local name="$1" type="$2" tun_name="$3"
+    [ -z "$tun_name" ] && return
+    local sid
+    sid=$(iface_sid "$name")
+    uci -q delete "network.${sid}"
+    uci set "network.${sid}=interface"
+    uci set "network.${sid}.device=${tun_name}"
+    uci set "network.${sid}.proto=none"
+}
+
+_delete_iface() {
+    local name="$1"
+    uci -q delete "network.$(iface_sid "$name")"
+}
+
+rebuild_network_interfaces() {
+    local tmp sid
+    tmp=$(mktemp)
+    uci -q show network | grep -oE "network\.[a-zA-Z0-9_]+=interface" \
+        | cut -d. -f2 | cut -d= -f1 > "$tmp"
+    while read -r sid; do
+        printf '%s' "$sid" | grep -q "^${IFACE_PREFIX}_" \
+            && uci -q delete "network.${sid}"
+    done < "$tmp"
+    rm -f "$tmp"
+
+    each_enabled_instance _create_iface
+    uci commit network
+}
+
+cleanup_network_interfaces() {
+    local tmp sid
+    tmp=$(mktemp)
+    uci -q show network | grep -oE "network\.[a-zA-Z0-9_]+=interface" \
+        | cut -d. -f2 | cut -d= -f1 > "$tmp"
+    while read -r sid; do
+        printf '%s' "$sid" | grep -q "^${IFACE_PREFIX}_" \
+            && uci -q delete "network.${sid}"
+    done < "$tmp"
+    rm -f "$tmp"
+    uci commit network
+}
+
 cleanup_fw() {
     local tmp
     tmp=$(mktemp)
@@ -206,17 +255,14 @@ _collect_web_ports() {
     local name="$1" type="$2"
     local conf="${CONFIG_PATH}/${name}.${type}"
     local val port
-    local fw_vnt_web fw_vnts_web
-    fw_vnt_web=$(uci  -q get vnt2.global.fw_vnt_web)
-    fw_vnts_web=$(uci -q get vnt2.global.fw_vnts_web)
 
     case "$type" in
         vnt)
-            [ "$fw_vnt_web"  != "1" ] && return
+            [ "$(uci -q get vnt2.global.fw_vnt_web)"  != "1" ] && return
             val=$(read_field "$conf" "web_addr")
             ;;
         vnts)
-            [ "$fw_vnts_web" != "1" ] && return
+            [ "$(uci -q get vnt2.global.fw_vnts_web)" != "1" ] && return
             val=$(read_field "$conf" "web_bind")
             ;;
     esac
@@ -228,15 +274,12 @@ _collect_web_ports() {
 
 apply_fw_web_redirect() {
     local sid="vnt2_web_redirect"
-    local fw_vnt_web fw_vnts_web
     local all_ports min_port max_port port_range lan_ip
 
     uci -q delete "firewall.${sid}"
 
-    fw_vnt_web=$(uci  -q get vnt2.global.fw_vnt_web)
-    fw_vnts_web=$(uci -q get vnt2.global.fw_vnts_web)
-
-    [ "$fw_vnt_web" != "1" ] && [ "$fw_vnts_web" != "1" ] && return
+    [ "$(uci -q get vnt2.global.fw_vnt_web)"  != "1" ] \
+        && [ "$(uci -q get vnt2.global.fw_vnts_web)" != "1" ] && return
 
     _WEB_PORTS_TMP=$(mktemp)
     each_enabled_instance _collect_web_ports
@@ -251,7 +294,6 @@ apply_fw_web_redirect() {
 
     min_port=$(echo "$all_ports" | tr ' ' '\n' | head -1)
     max_port=$(echo "$all_ports" | tr ' ' '\n' | tail -1)
-
     if [ "$min_port" = "$max_port" ]; then
         port_range="$min_port"
     else
@@ -389,6 +431,7 @@ start_service() {
     init_paths
     echo "VNT2: 启动所有已启用实例..."
     each_enabled_instance _do_start_instance
+    rebuild_network_interfaces
     rebuild_firewall
 }
 
@@ -397,10 +440,12 @@ stop_service() {
     cleanup_fw
     uci commit firewall
     fw4 reload 2>/dev/null || /etc/init.d/firewall reload
+    cleanup_network_interfaces
 }
 
 reload_service() {
     init_paths
     setup_cron
+    rebuild_network_interfaces
     rebuild_firewall
 }
