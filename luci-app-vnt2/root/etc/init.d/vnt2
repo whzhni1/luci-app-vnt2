@@ -75,18 +75,18 @@ get_lan_ip() {
     uci -q get network.lan.ipaddr
 }
 
-is_instance_running() {
-    local pid
-    pid=$(cat "/var/run/vnt2_${1}.pid" 2>/dev/null)
-    [ -z "$pid" ] && return 1
-    kill -0 "$pid" 2>/dev/null
-}
-
 _instance_log() {
     local msg="$2"
     printf '[%s] >>> %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$msg" \
         >> "${LOG_DIR}/${1}.log"
     echo "[${1}] $msg"
+}
+
+is_instance_running() {
+    local pid
+    pid=$(cat "/var/run/vnt2_${1}.pid" 2>/dev/null)
+    [ -z "$pid" ] && return 1
+    kill -0 "$pid" 2>/dev/null
 }
 
 each_enabled_instance() {
@@ -102,6 +102,25 @@ each_enabled_instance() {
         name=$(uci    -q get "vnt2.${sid}.name")
         enabled=$(uci -q get "vnt2.${sid}.enabled")
         [ -z "$name" ] || [ "$enabled" != "1" ] && continue
+        tun_name=$(get_tun_name "$name" "$type")
+        "$callback" "$name" "$type" "$tun_name"
+    done < "$tmp"
+
+    rm -f "$tmp"
+}
+
+each_all_instance() {
+    local callback="$1"
+    local tmp sid name type tun_name
+    tmp=$(mktemp)
+
+    uci -q show vnt2 2>/dev/null \
+        | grep -E "^vnt2\.[^.]*=(vnt|vnts)$" > "$tmp"
+
+    while IFS='=' read -r key type; do
+        sid=$(printf '%s' "$key" | cut -d. -f2)
+        name=$(uci -q get "vnt2.${sid}.name")
+        [ -z "$name" ] && continue
         tun_name=$(get_tun_name "$name" "$type")
         "$callback" "$name" "$type" "$tun_name"
     done < "$tmp"
@@ -254,22 +273,32 @@ apply_fw_ports() {
 _collect_web_ports() {
     local name="$1" type="$2"
     local conf="${CONFIG_PATH}/${name}.${type}"
-    local val port
+    local val port field
 
     case "$type" in
         vnt)
-            [ "$(uci -q get vnt2.global.fw_vnt_web)"  != "1" ] && return
+            [ "$(uci -q get vnt2.global.fw_vnt_web)" != "1" ] && return
             val=$(read_field "$conf" "web_addr")
+            [ -z "$val" ] && return
+            port=$(extract_port "$val")
+            [ -n "$port" ] && echo "$port" >> "$_WEB_PORTS_TMP"
             ;;
         vnts)
-            [ "$(uci -q get vnt2.global.fw_vnts_web)" != "1" ] && return
-            val=$(read_field "$conf" "web_bind")
+            if [ "$(uci -q get vnt2.global.fw_vnts_web)" = "1" ]; then
+                val=$(read_field "$conf" "web_bind")
+                [ -n "$val" ] && {
+                    port=$(extract_port "$val")
+                    [ -n "$port" ] && echo "$port" >> "$_WEB_PORTS_TMP"
+                }
+            fi
+            for field in $VNTS_PORT_FIELDS; do
+                val=$(read_field "$conf" "$field")
+                [ -z "$val" ] && continue
+                port=$(extract_port "$val")
+                [ -n "$port" ] && echo "$port" >> "$_WEB_PORTS_TMP"
+            done
             ;;
     esac
-
-    [ -z "$val" ] && return
-    port=$(extract_port "$val")
-    [ -n "$port" ] && echo "$port" >> "$_WEB_PORTS_TMP"
 }
 
 apply_fw_web_redirect() {
@@ -278,20 +307,14 @@ apply_fw_web_redirect() {
 
     uci -q delete "firewall.${sid}"
 
-    [ "$(uci -q get vnt2.global.fw_vnt_web)"  != "1" ] \
-        && [ "$(uci -q get vnt2.global.fw_vnts_web)" != "1" ] && return
-
     _WEB_PORTS_TMP=$(mktemp)
     each_enabled_instance _collect_web_ports
     all_ports=$(sort -un "$_WEB_PORTS_TMP" | tr '\n' ' ')
     all_ports="${all_ports% }"
     rm -f "$_WEB_PORTS_TMP"
-
     [ -z "$all_ports" ] && return
-
     lan_ip=$(get_lan_ip)
     [ -z "$lan_ip" ] && return
-
     min_port=$(echo "$all_ports" | tr ' ' '\n' | head -1)
     max_port=$(echo "$all_ports" | tr ' ' '\n' | tail -1)
     if [ "$min_port" = "$max_port" ]; then
@@ -304,6 +327,7 @@ apply_fw_web_redirect() {
         "type=redirect" \
         "name=vnt2_web_redirect" \
         "src=wan" \
+        "dest=lan" \
         "proto=tcp udp" \
         "src_dport=${port_range}" \
         "dest_ip=${lan_ip}" \
@@ -312,18 +336,22 @@ apply_fw_web_redirect() {
 }
 
 _add_tun_to_zone() {
-    [ -n "$3" ] && uci add_list "firewall.${FW_ZONE}.device=$3"
+    local name="$1" type="$2" tun_name="$3"
+    [ -z "$tun_name" ] && return
+    local sid
+    sid=$(iface_sid "$name")
+    uci add_list "firewall.${FW_ZONE}.network=${sid}"
+    uci add_list "firewall.${FW_ZONE}.device=${tun_name}"
 }
 
 rebuild_fw_zone() {
-    uci -q delete "firewall.${FW_ZONE}"
-    uci batch <<EOF
-set firewall.${FW_ZONE}=zone
-set firewall.${FW_ZONE}.name=${FW_ZONE}
-set firewall.${FW_ZONE}.input=ACCEPT
-set firewall.${FW_ZONE}.output=ACCEPT
-set firewall.${FW_ZONE}.forward=ACCEPT
-EOF
+    uci_fw_rule "$FW_ZONE" \
+        "type=zone" \
+        "name=${FW_ZONE}" \
+        "input=ACCEPT" \
+        "output=ACCEPT" \
+        "forward=ACCEPT" \
+        "masq=1"
     each_enabled_instance _add_tun_to_zone
 }
 
@@ -375,12 +403,42 @@ get_bin_args() {
     esac
 }
 
+_fix_instance_routes() {
+    local name="$1" type="$2" tun_name="$3"
+    [ -z "$tun_name" ] && return
+    [ "$type" = "vnts" ] && return
+    ip link show "$tun_name" > /dev/null 2>&1 || return
+    local conf="${CONFIG_PATH}/${name}.${type}"
+    local input_line lan_cidr
+    grep -E "^input[[:space:]]*=" "$conf" 2>/dev/null \
+        | grep -oE '"[^"]+"' \
+        | tr -d '"' \
+        | while read -r entry; do
+            lan_cidr=$(printf '%s' "$entry" | cut -d',' -f1)
+            [ -z "$lan_cidr" ] && continue
+            printf '%s' "$lan_cidr" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' || continue
+            if ! ip route show dev "$tun_name" | grep -qF "$lan_cidr"; then
+                ip route replace "$lan_cidr" dev "$tun_name" 2>/dev/null && \
+                    _instance_log "$name" "修复路由: ${lan_cidr} dev ${tun_name}"
+            fi
+        done
+}
+
+fix_all_routes() {
+    each_enabled_instance _fix_instance_routes
+}
+
+_cleanup_tun() {
+    local name="$1" type="$2" tun_name="$3"
+    [ -n "$tun_name" ] && ip link delete "$tun_name" 2>/dev/null
+    _delete_iface "$name"
+}
+
 _do_start_instance() {
     local name="$1" type="$2" tun_name="$3"
     local conf="${CONFIG_PATH}/${name}.${type}"
     local bin_args bin log_file
     log_file="${LOG_DIR}/${name}.log"
-
     [ ! -f "$conf" ] && {
         _instance_log "$name" "启动失败：配置文件不存在: $conf"
         return 1
@@ -395,8 +453,9 @@ _do_start_instance() {
         _instance_log "$name" "启动失败：二进制不可执行: $bin"
         return 1
     }
-
-    [ -n "$tun_name" ] && ip link delete "$tun_name" 2>/dev/null
+    if ! is_instance_running "$name"; then
+        [ -n "$tun_name" ] && ip link delete "$tun_name" 2>/dev/null
+    fi
 
     procd_open_instance "$name"
     procd_set_param command "$VNT_RUN" "$name" "$log_file"
@@ -412,17 +471,6 @@ _do_start_instance() {
     _instance_log "$name" "已注册 type=$type bin=$bin tun=${tun_name:-auto}"
 }
 
-_do_stop_instance() {
-    local name="$1" type="$2" tun_name="$3"
-    local pid
-    procd_kill "vnt2" "$name" 2>/dev/null || true
-    pid=$(cat "/var/run/vnt2_${name}.pid" 2>/dev/null)
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null
-    rm -f "/var/run/vnt2_${name}.pid"
-    [ -n "$tun_name" ] && ip link delete "$tun_name" 2>/dev/null
-    _instance_log "$name" "已停止 tun=${tun_name:-auto}"
-}
-
 service_triggers() {
     procd_add_reload_trigger "vnt2"
 }
@@ -433,14 +481,15 @@ start_service() {
     each_enabled_instance _do_start_instance
     rebuild_network_interfaces
     rebuild_firewall
+    fix_all_routes
 }
 
 stop_service() {
-    each_enabled_instance _do_stop_instance
+    each_all_instance _cleanup_tun
     cleanup_fw
+    cleanup_network_interfaces
     uci commit firewall
     fw4 reload 2>/dev/null || /etc/init.d/firewall reload
-    cleanup_network_interfaces
 }
 
 reload_service() {
@@ -448,4 +497,5 @@ reload_service() {
     setup_cron
     rebuild_network_interfaces
     rebuild_firewall
+    fix_all_routes
 }
