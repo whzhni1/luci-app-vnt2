@@ -409,7 +409,7 @@ _fix_instance_routes() {
     [ "$type" = "vnts" ] && return
     ip link show "$tun_name" > /dev/null 2>&1 || return
     local conf="${CONFIG_PATH}/${name}.${type}"
-    local input_line lan_cidr
+    local lan_cidr
     grep -E "^input[[:space:]]*=" "$conf" 2>/dev/null \
         | grep -oE '"[^"]+"' \
         | tr -d '"' \
