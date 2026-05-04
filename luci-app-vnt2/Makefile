@@ -49,4 +49,19 @@ ubus call service set '{"name":"vnt2","instances":{}}' 2>/dev/null || true
 exit 0
 endef
 
+define Package/$(PKG_NAME)/postrm
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+BINDIR=/usr/bin
+CFGDIR=/etc/vnt2_config
+for f in vnt2_cli vnt2_web vnt2_ctrl vnt2s; do
+	rm -f $${BINDIR}/$$f
+done
+for f in $${CFGDIR}/*.vnt $${CFGDIR}/*.vnts; do
+	rm -f $$f
+done
+
+exit 0
+endef
+
 $(eval $(call BuildPackage,$(PKG_NAME)))
