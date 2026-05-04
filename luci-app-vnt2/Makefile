@@ -5,7 +5,7 @@ LUCI_DEPENDS:=+luci-base +luci-compat +kmod-tun
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-vnt2
-PKG_VERSION:=1.4.0
+PKG_VERSION:=1.4.1
 PKG_RELEASE:=1
 
 LUCI_MINIFY_JS:=0
@@ -42,12 +42,14 @@ CFGDIR=/etc/vnt2_config
 $${INITD}/vnt2 stop    2>/dev/null || true
 $${INITD}/vnt2 disable 2>/dev/null || true
 ubus call service set '{"name":"vnt2","instances":{}}' 2>/dev/null || true
-for f in vnt2_cli vnt2_web vnt2_ctrl vnts2; do
-	rm -f $${BINDIR}/$$f
-done
-for f in $${CFGDIR}/*.vnt $${CFGDIR}/*.vnts; do
-	rm -f $$f
-done
+if [ "$$1" != "upgrade" ]; then
+	for f in vnt2_cli vnt2_web vnt2_ctrl vnts2; do
+		rm -f $${BINDIR}/$$f
+	done
+	for f in $${CFGDIR}/*.vnt $${CFGDIR}/*.vnts; do
+		rm -f $$f
+	done
+fi
 (sleep 2
  $${INITD}/rpcd restart
  [ -x $${INITD}/uhttpd ] && $${INITD}/uhttpd restart
