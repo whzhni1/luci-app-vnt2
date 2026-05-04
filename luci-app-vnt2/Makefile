@@ -42,8 +42,8 @@ CFGDIR=/etc/vnt2_config
 $${INITD}/vnt2 stop    2>/dev/null || true
 $${INITD}/vnt2 disable 2>/dev/null || true
 ubus call service set '{"name":"vnt2","instances":{}}' 2>/dev/null || true
-if [ "$$1" != "upgrade" ]; then
-	for f in vnt2_cli vnt2_web vnt2_ctrl vnts2; do
+if [ "$$1" != "upgrade" ] && [ -z "$$2" ]; then
+	for f in vnt2_cli vnt2_web vnt2_ctrl vnt2s; do
 		rm -f $${BINDIR}/$$f
 	done
 	for f in $${CFGDIR}/*.vnt $${CFGDIR}/*.vnts; do
