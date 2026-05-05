@@ -65,8 +65,8 @@ wget -q -O - "https://gitlab.com/whzhni/tailscale/-/raw/main/Auto_Install_Script
 3. 点击 **保存并应用**
 
 > 参考图片：
-> ![参考图](/A_vnt2_config.png)
->![参考图](/B_vnt2_config.png)
+> ![参考图](A_vnt2_config.png)
+>![参考图](B_vnt2_config.png)
 
 
 ---
@@ -95,7 +95,7 @@ wget -q -O - "https://gitlab.com/whzhni/tailscale/-/raw/main/Auto_Install_Script
 2. 勾选刚才创建的配置
 3. 点击 **保存并应用**
 
-> 参考图片：![参考图](/A_vnts2_config.png)
+> 参考图片：![参考图](A_vnts2_config.png)
 
 ---
 
@@ -115,7 +115,7 @@ wget -q -O - "https://gitlab.com/whzhni/tailscale/-/raw/main/Auto_Install_Script
 
 ### 参考图片
 
-- ![参考图](/vnt_A_vnts2_config.png)
+- ![参考图](vnt_A_vnts2_config.png)
 
 ---
 
