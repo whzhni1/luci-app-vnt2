@@ -63,4 +63,4 @@
   ```bash
   wget -q -O - "https://gitlab.com/whzhni/tailscale/-/raw/main/Auto_Install_Script.sh" | sh -s luci-app-vnt2
   ```
-[VNT VNTS 设置教程](Image/README.md)
+## [VNT VNTS 设置教程](Image/README.md)
