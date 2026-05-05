@@ -21,11 +21,12 @@ define Package/$(PKG_NAME)/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 INITD=/etc/init.d
-if [ -z "$$(uci -q get vnt2.global.arch)" ]; then
+if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     ARCH=$$(uname -m)
-    uci -q set vnt2.global="$$(uci -q get vnt2.global 2>/dev/null || echo global)"
+    uci -q get vnt2.global > /dev/null 2>&1 || uci set vnt2.global='global'
     uci set vnt2.global.arch="$${ARCH}"
     uci commit vnt2
+    [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh
 fi
 $${INITD}/vnt2 enable
 (sleep 3
@@ -33,7 +34,6 @@ $${INITD}/vnt2 enable
  [ -x $${INITD}/uhttpd ] && $${INITD}/uhttpd restart
  [ -x $${INITD}/nginx  ] && $${INITD}/nginx   restart
  $${INITD}/vnt2 start
- [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh
 ) > /dev/null 2>&1 &
 
 exit 0
