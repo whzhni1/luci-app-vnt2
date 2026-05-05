@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.1
+# VNT2 更新脚本 v1.2
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -372,7 +372,7 @@ auto_update_one() {
 
     log "$proj" "本地: ${cur_ver:-未安装}  上游: ${latest_ver:-未知}"
 
-    if [ -n "$cur_ver" ] && [ -n "$latest_ver" ] && [ "$cur_ver" = "$latest_ver" ]; then
+    if [ -n "$cur_ver" ] && [ -n "$latest_ver" ] && [ "$(printf '%s\n' "$cur_ver" "$latest_ver" | sort -V | tail -1)" = "$cur_ver" ]; then
         log "$proj" "已是最新，跳过"
         set_status "$proj" "done:已是最新($cur_ver)"
         return 0

@@ -91,18 +91,13 @@ return view.extend({
 
     handleSave: function() {
         var self = this;
-        return uci.save().then(function() {
-            return callSaveSettings.apply(null, self._getUciSettings());
-        });
+        return callSaveSettings.apply(null, args);
     },
 
     handleSaveApply: function() {
         var self = this;
-        return uci.save()
-            .then(function() { return ui.changes.apply(); })
-            .then(function() {
-                return callSaveSettings.apply(null, self._getUciSettings());
-            });
+        return callSaveSettings.apply(null, self._getUciSettings())
+            .then(function() { return ui.changes.apply(); });
     },
 
     handleReset: function() {
@@ -196,7 +191,7 @@ return view.extend({
                     buildText('s-config-path', 'config_path'),
                     '配置文件存储目录，默认 /etc/vnt2_config'),
                 vui.buildFormRow('设备架构',
-                    buildText('s-arch', 'arch', 'width:200px;', self._sysinfo.arch || ''),
+                    buildText('s-arch', 'arch', 'width:200px;'),
                     '当前检测：' + (self._sysinfo.arch || '未知')),
                 vui.buildFormRow('下载镜像源', mirrorSel, '多镜像源确保成功下载'),
                 vui.buildFormRow('自动更新',
@@ -506,7 +501,7 @@ return view.extend({
             }
             fileSel.innerHTML = '';
             if (!release || !release.filenames) return;
-            var arch    = uci.get('vnt2','global','arch') || self._sysinfo.arch || '';
+            var arch    = uci.get('vnt2','global','arch') || '';
             var matched = -1;
             release.filenames.forEach(function(fname, idx) {
                 fileSel.appendChild(E('option', { 'value': fname }, fname));
