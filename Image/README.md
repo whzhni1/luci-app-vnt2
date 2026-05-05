@@ -1,5 +1,5 @@
 
-# VNT 2.0 组网教程
+# VNT 2.0 VNTS 2.0 组网教程
 
 ## 一、安装 luci-app-vnt2
 
