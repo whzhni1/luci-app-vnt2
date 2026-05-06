@@ -1,6 +1,6 @@
 
 
-# LuCI - VNT2 组网管理界面
+# LuCI - VNT2 组网管理界面  # [VNT VNTS 设置教程](Image/README.md)
 
 >luci-app-vnt2 一个为 OpenWrt LuCI 设计的 VNT 虚拟组网管理前端，支持多实例并发、实时监控、一键更新与防火墙自动放行。
 
@@ -63,4 +63,4 @@
   ```bash
   wget -q -O - "https://gitlab.com/whzhni/tailscale/-/raw/main/Auto_Install_Script.sh" | sh -s luci-app-vnt2
   ```
-## [VNT VNTS 设置教程](Image/README.md)
+
