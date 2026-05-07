@@ -26,6 +26,8 @@ if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     uci -q get vnt2.global > /dev/null 2>&1 || uci set vnt2.global='global'
     uci set vnt2.global.arch="$${ARCH}"
     uci commit vnt2
+fi
+if [ ! -x "$${BIN_PATH}" ]; then
     [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh
 fi
 $${INITD}/vnt2 enable
