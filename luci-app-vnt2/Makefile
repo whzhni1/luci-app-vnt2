@@ -28,6 +28,7 @@ if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     uci commit vnt2
 fi
 if [ ! -x "$${BIN_PATH}" ]; then
+    echo "开始自动下载vnt2/vnts2 ……"
     [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh
 fi
 $${INITD}/vnt2 enable
