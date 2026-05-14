@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.2
+# VNT2 更新脚本 v1.3
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -29,20 +29,25 @@ format_size() {
 }
 
 pm_install() {
-    local pkg="$1" mode="$2" rc=0
-    case "$PM" in
-        apk)
-            [ "$mode" = "local" ] \
-                && apk add --allow-untrusted "$pkg" >/dev/null 2>&1 || rc=$? \
-                || apk add                  "$pkg" >/dev/null 2>&1 || rc=$?
-            ;;
-        opkg)
-            [ "$mode" = "local" ] \
-                && opkg install --force-reinstall "$pkg" >/dev/null 2>&1 || rc=$? \
-                || opkg install               "$pkg" >/dev/null 2>&1 || rc=$?
-            ;;
-        *) rc=1 ;;
-    esac
+    local pkg="$1" rc=0
+    shift
+
+    if echo "$pkg" | grep -q '/'; then
+        case "$PM" in
+            apk)  apk add --allow-untrusted "$pkg" >/dev/null 2>&1 || rc=$? ;;
+            opkg) opkg install "$pkg" >/dev/null 2>&1 || rc=$? ;;
+        esac
+
+    elif ! command -v "$pkg" >/dev/null 2>&1; then
+        echo "  [依赖] 安装 $pkg"
+        $PM update >/dev/null 2>&1
+        case "$PM" in
+            apk)  apk add "$pkg" >/dev/null 2>&1 || rc=$? ;;
+            opkg) opkg install "$pkg" >/dev/null 2>&1 || rc=$? ;;
+        esac
+    fi
+
+    [ $rc -eq 0 ] && [ $# -gt 0 ] && "$pkg" "$@"
     return $rc
 }
 
@@ -97,8 +102,6 @@ load_uci() {
 
 cmd_check() {
     local proj="$1" mirror="${2:-github}"
-    pm_install curl
-
     rm -f "$(log_file "$proj")" "$(status_file "$proj")" \
           "$(cache_full "$proj")" "$(cache_slim "$proj")"
 
@@ -109,7 +112,7 @@ cmd_check() {
     url="$(api_url "$mirror" "$proj")"
     # log "$proj" "API: $url"
 
-    raw="$(curl -fsSL --connect-timeout 10 --max-time 30 "$url" 2>&1 | sed 's/": /":/g')"
+    raw="$(pm_install curl -fsSL --connect-timeout 10 --max-time 30 "$url" 2>&1 | sed 's/": /":/g')"
 
     if [ -z "$raw" ] || ! echo "$raw" | grep -q '"tag_name"'; then
         log "$proj" "API请求失败或无版本"
@@ -183,8 +186,6 @@ cmd_check() {
 
 cmd_download() {
     local proj="$1" tag="$2" fname="$3" upx="${4:-}"
-    pm_install curl
-
     [ -z "$upx" ] || [ "$upx" = "0" ] && \
         upx="$(uci get vnt2.global.upx_compressed 2>/dev/null || echo 0)"
 
@@ -213,7 +214,7 @@ cmd_download() {
     tmp="$(tmp_file "$proj" "$fname")"
     rm -f "$tmp"
 
-    curl -fsSL --connect-timeout 15 --max-time 300 \
+    pm_install curl -fsSL --connect-timeout 15 --max-time 300 \
         --retry 3 --retry-delay 5 \
         -o "$tmp" "$dl_url" >> "$(log_file "$proj")" 2>&1
     local rc=$?
@@ -246,9 +247,8 @@ _do_install() {
     local proj="$1" src="$2" dst="$3" upx="$4"
     chmod 755 "$src"
     if [ "$upx" = "1" ]; then
-        pm_install upx
         log "$proj" "UPX压缩: $(basename "$dst")"
-        upx --no-color -q -q --force "$src" -o "$dst" >> "$(log_file "$proj")" 2>&1 \
+        pm_install upx --no-color -q -q --force "$src" -o "$dst" >> "$(log_file "$proj")" 2>&1 \
             && log "$proj" "UPX成功" \
             || { log "$proj" "UPX失败，直接复制"; cp "$src" "$dst"; }
     else
@@ -275,11 +275,10 @@ _install_bin() {
             installed="$b"
             ;;
         gz|zip)
-            pm_install unzip
             rm -rf "$extract_dir"; mkdir -p "$extract_dir"
             [ "$ftype" = "gz" ] \
                 && tar -xzf "$tmp" -C "$extract_dir" 2>>"$(log_file "$proj")" \
-                || unzip -o  "$tmp" -d "$extract_dir" 2>>"$(log_file "$proj")"
+                || pm_install unzip -o  "$tmp" -d "$extract_dir" 2>>"$(log_file "$proj")"
             for b in $bins; do
                 local src
                 src="$(find "$extract_dir" -name "$b" -type f 2>/dev/null | head -1)"

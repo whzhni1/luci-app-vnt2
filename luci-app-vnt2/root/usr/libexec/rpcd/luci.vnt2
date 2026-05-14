@@ -247,7 +247,7 @@ function instanceAction(name, action) {
         uci.commit("vnt2");
         action = "start"; 
     }
-    system(`nohup setsid ${DEFAULTS.init_script} ${action} >/dev/null 2>&1 &`);
+    system(`setsid ${DEFAULTS.init_script} ${action} >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
@@ -423,7 +423,7 @@ function cmdSaveConfig(args) {
         });
         uci.commit("vnt2");
         unlink(confFile(oldName, type));
-        system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
+        system(`setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
     } else {
         if (isRunning(name)) instanceAction(name, "restart");
     }
@@ -638,7 +638,7 @@ function cmdGetSystemInfo() {
             `${CFG.bin_path}/${vers[i][1]} --version 2>/dev/null | head -1`
         ));
     r.luci_version =
-        trim(execOutput("apk list 2>/dev/null | grep luci-app-vnt2 | awk '{print $3}'")) ||
+        trim(execOutput("apk list 2>/dev/null | grep luci-app-vnt2 | awk '{print $1}' | sed 's/luci-app-vnt2-//'")) ||
         trim(execOutput("opkg list-installed 2>/dev/null | grep luci-app-vnt2 | awk '{print $3}'")) ||
         "未知";
     return r;
@@ -746,7 +746,7 @@ function cmdSetEnabled(args) {
         idx++;
     }
     uci.commit("vnt2");
-    system(`nohup setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
+    system(`setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
@@ -760,7 +760,7 @@ function cmdGetUpstreamVersion(args) {
     system(`mkdir -p '${DEFAULTS.update_dir}'`);
     system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
     system(
-        `nohup setsid '${DEFAULTS.update_script}' check '${project}' '${mirror}'` +
+        `setsid '${DEFAULTS.update_script}' check '${project}' '${mirror}'` +
         ` >> '${updLogFile(project)}' 2>&1 &`
     );
     return { result: "ok" };
@@ -774,7 +774,7 @@ function cmdDoUpdate(args) {
     system(`mkdir -p '${DEFAULTS.update_dir}'`);
     system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
     system(
-        `nohup setsid '${DEFAULTS.update_script}' download` +
+        `setsid '${DEFAULTS.update_script}' download` +
         ` '${project}' '${tag}' '${filename}' '${upx}'` +
         ` >> '${updLogFile(project)}' 2>&1 &`
     );
