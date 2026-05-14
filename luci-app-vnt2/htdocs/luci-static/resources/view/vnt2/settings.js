@@ -37,12 +37,12 @@ var COMPONENTS = [
 ];
 
 var FW_OPTIONS = [
-    { key: 'fw_vnt_to_lan', label: 'VNT → LAN', desc: '允许虚拟网络访问本地局域网' },
-    { key: 'fw_lan_to_vnt', label: 'LAN → VNT', desc: '允许本地局域网访问虚拟网络' },
-    { key: 'fw_vnt_to_wan', label: 'VNT → WAN', desc: '允许虚拟网络访问外网'       },
-    { key: 'fw_wan_to_vnt', label: 'WAN → VNT', desc: '允许外网访问虚拟网络'       },
-    { key: 'fw_vnt_web',    label: 'VNT Web 外网访问',  desc: '需配置 web_addr'    },
-    { key: 'fw_vnts_web',   label: 'VNTS Web 外网访问', desc: '需配置 web_bind'    },
+    { key: 'fw_vnt_to_lan', label: 'VNT → LAN', desc: _('Allow virtual network to access local LAN') },
+    { key: 'fw_lan_to_vnt', label: 'LAN → VNT', desc: _('Allow local LAN to access virtual network') },
+    { key: 'fw_vnt_to_wan', label: 'VNT → WAN', desc: _('Allow virtual network to access WAN')       },
+    { key: 'fw_wan_to_vnt', label: 'WAN → VNT', desc: _('Allow WAN to access virtual network')       },
+    { key: 'fw_vnt_web',    label: 'VNT Web WAN Access',  desc: _('Requires web_addr configuration')    },
+    { key: 'fw_vnts_web',   label: 'VNTS Web WAN Access', desc: _('Requires web_bind configuration')    },
 ];
 
 return view.extend({
@@ -62,10 +62,10 @@ return view.extend({
         self._sysinfo  = data[2] || {};
         self._binaries = data[3] || {};
         return E('div', { 'class': 'cbi-map' }, [
-            E('h2', {}, 'VNT2 设置与更新'),
+            E('h2', {}, _('VNT2 Settings & Update')),
             self._buildTabContainer([
-                { id: 'tab-settings', label: '设置', content: self._buildSettingsTab() },
-                { id: 'tab-update',   label: '更新', content: self._buildUpdateTab()   }
+                { id: 'tab-settings', label: _('Settings'), content: self._buildSettingsTab() },
+                { id: 'tab-update',   label: _('Update'),   content: self._buildUpdateTab()   }
             ])
         ]);
     },
@@ -168,7 +168,7 @@ return view.extend({
             return vui.buildFormRow(opt.label,
                 E('label', { 'style': 'cursor:pointer;user-select:none;' }, [
                     buildCheck('s-' + opt.key, opt.key),
-                    E('span', { 'style': 'margin-left:6px;' }, '启用')
+                    E('span', { 'style': 'margin-left:6px;' }, _('Enable'))
                 ]), opt.desc || '');
         }
 
@@ -183,23 +183,23 @@ return view.extend({
 
         return E('div', {}, [
             E('div', { 'class': 'cbi-section' }, [
-                E('h3', {}, '基本设置'),
-                vui.buildFormRow('二进制程序路径',
+                E('h3', {}, _('Basic Settings')),
+                vui.buildFormRow(_('Binary Path'),
                     buildText('s-bin-path', 'bin_path'),
-                    '程序文件所在目录，默认 /usr/bin'),
-                vui.buildFormRow('配置文件路径',
+                    _('Program file directory, default /usr/bin')),
+                vui.buildFormRow(_('Config Path'),
                     buildText('s-config-path', 'config_path'),
-                    '配置文件存储目录，默认 /etc/vnt2_config'),
-                vui.buildFormRow('设备架构',
+                    _('Configuration file storage directory, default /etc/vnt2_config')),
+                vui.buildFormRow(_('Device Architecture'),
                     buildText('s-arch', 'arch', 'width:200px;'),
-                    '当前检测：' + (self._sysinfo.arch || '未知')),
-                vui.buildFormRow('下载镜像源', mirrorSel, '多镜像源确保成功下载'),
-                vui.buildFormRow('自动更新',
+                    _('Current detection: ') + (self._sysinfo.arch || _('Unknown'))),
+                vui.buildFormRow(_('Download Mirror'), mirrorSel, _('Multiple mirrors ensure successful download')),
+                vui.buildFormRow(_('Auto Update'),
                     E('label', { 'style': 'cursor:pointer;user-select:none;' }, [
                         buildCheck('s-auto-update', 'auto_update'),
-                        E('span', { 'style': 'margin-left:6px;' }, '启用自动更新')
-                    ]), '定期自动检查并更新程序'),
-                vui.buildFormRow('更新间隔（天）',
+                        E('span', { 'style': 'margin-left:6px;' }, _('Enable auto update'))
+                    ]), _('Automatically check and update programs periodically')),
+                vui.buildFormRow(_('Update Interval (days)'),
                     E('input', { 'type': 'number', 'class': 'cbi-input-text',
                         'id': 's-interval',
                         'value': g('update_interval') || '7',
@@ -207,15 +207,15 @@ return view.extend({
                         'change': function() {
                             uci.set('vnt2', 'global', 'update_interval', this.value || '7');
                         }
-                    }), '自动检查更新的间隔天数'),
-                vui.buildFormRow('UPX 压缩',
+                    }), _('Interval days for automatic update check')),
+                vui.buildFormRow(_('UPX Compression'),
                     E('label', { 'style': 'cursor:pointer;user-select:none;' }, [
                         buildCheck('s-upx', 'upx_compressed'),
-                        E('span', { 'style': 'margin-left:6px;' }, '安装后使用 UPX 压缩')
-                    ]), '可显著减小程序文件体积')
+                        E('span', { 'style': 'margin-left:6px;' }, _('Compress with UPX after installation'))
+                    ]), _('Can significantly reduce program file size'))
             ]),
             E('div', { 'class': 'cbi-section' }, [
-                E('h3', {}, '防火墙转发'),
+                E('h3', {}, _('Firewall Forwarding')),
                 E('div', {}, FW_OPTIONS.map(buildCheckRow))
             ])
         ]);
@@ -227,7 +227,7 @@ return view.extend({
         var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;';
 
         return E('div', { 'class': 'cbi-section' }, [
-            E('h3', {}, '当前版本信息'),
+            E('h3', {}, _('Current Version Info')),
             E('div', { 'style': 'width:100%;display:block;margin-bottom:20px;' },
                 E('table', {
                     'style': [
@@ -237,35 +237,35 @@ return view.extend({
                     ].join(';')
                 }, [
                     E('thead', {}, E('tr', {},
-                        ['组件', '版本', '状态'].map(function(h) {
+                        [_('Component'), _('Version'), _('Status')].map(function(h) {
                             return E('th', { 'style': thStyle }, h);
                         })
                     )),
                     E('tbody', {}, [
                         E('tr', {}, [
                             E('td', { 'style': tdStyle }, 'luci-app-vnt2'),
-                            E('td', { 'style': tdStyle }, sys.luci_version || '未知'),
-                            E('td', { 'style': tdStyle + 'color:#28a745;font-weight:bold;' }, '✓ 已安装')
+                            E('td', { 'style': tdStyle }, sys.luci_version || _('Unknown')),
+                            E('td', { 'style': tdStyle + 'color:#28a745;font-weight:bold;' }, '✓ ' + _('Installed'))
                         ])
                     ].concat(COMPONENTS.map(function(comp) {
                         var installed = !!bins[comp.binKey];
                         return E('tr', {}, [
                             E('td', { 'style': tdStyle }, comp.name),
                             E('td', { 'style': tdStyle },
-                                installed ? (sys[comp.versionKey] || '未知') : '未安装'),
+                                installed ? (sys[comp.versionKey] || _('Unknown')) : _('Not installed')),
                             E('td', { 'style': tdStyle + 'color:' +
                                 (installed ? '#28a745' : '#dc3545') + ';font-weight:bold;' },
-                                installed ? '✓ 已安装' : '✗ 未安装')
+                                installed ? '✓ ' + _('Installed') : '✗ ' + _('Not installed'))
                         ]);
                     })))
                 ])
             ),
-            E('h3', {}, '检查更新'),
-            self._buildUpdateBlock('luci-app-vnt2', 'LuCI 插件（luci-app-vnt2）'),
+            E('h3', {}, _('Check Update')),
+            self._buildUpdateBlock('luci-app-vnt2', _('LuCI Plugin (luci-app-vnt2)')),
             E('div', { 'style': 'margin:12px 0;border-top:1px solid #eee;' }),
-            self._buildUpdateBlock('vnt',  'VNT 客户端（vnt2_cli / vnt2_web / vnt2_ctrl）'),
+            self._buildUpdateBlock('vnt',  _('VNT Client (vnt2_cli / vnt2_web / vnt2_ctrl)')),
             E('div', { 'style': 'margin:12px 0;border-top:1px solid #eee;' }),
-            self._buildUpdateBlock('vnts', 'VNTS 服务端（vnts2）')
+            self._buildUpdateBlock('vnts', _('VNTS Server (vnts2))'))
         ]);
     },
 
@@ -283,13 +283,13 @@ return view.extend({
                     'class': 'btn cbi-button-action',
                     'id':    bid + '-check-btn',
                     'click': function() { self._checkUpstream(project, bid); }
-                }, '检查上游版本'),
+                }, _('Check upstream version')),
                 E('span', { 'id': bid + '-status', 'style': 'font-size:13px;color:#888;' },
-                    '点击检查获取版本信息')
+                    _('Click to check for version info'))
             ]),
             E('div', { 'id': bid + '-mirror-row',
                 'style': 'display:none;margin-top:8px;align-items:center;gap:8px;' }, [
-                E('span', { 'style': 'font-size:13px;color:#666;' }, '切换镜像源重试：'),
+                E('span', { 'style': 'font-size:13px;color:#666;' }, _('Switch mirror and retry:')),
                 E('select', {
                     'class': 'cbi-input-select',
                     'id':    bid + '-mirror',
@@ -302,22 +302,22 @@ return view.extend({
                 E('button', {
                     'class': 'btn cbi-button-action',
                     'click': function() { self._checkUpstream(project, bid); }
-                }, '重试')
+                }, _('Retry'))
             ]),
             E('div', { 'id': bid + '-selects',
                 'style': 'display:none;margin-top:10px;' }, [
                 E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;' }, [
-                    E('label', {}, '版本：'),
+                    E('label', {}, _('Version: ')),
                     E('select', { 'class': 'cbi-input-select', 'id': bid + '-tag',
                         'style': 'width:auto;' }),
-                    E('label', {}, '文件：'),
+                    E('label', {}, _('File: ')),
                     E('select', { 'class': 'cbi-input-select', 'id': bid + '-file',
                         'style': 'width:auto;' }),
                     E('button', {
                         'class': 'btn cbi-button-apply',
                         'id':    bid + '-btn',
                         'click': function() { self._doUpdate(project, bid); }
-                    }, '立即更新')
+                    }, _('Update Now'))
                 ])
             ]),
             E('pre', { 'id': bid + '-log',
@@ -366,12 +366,12 @@ return view.extend({
         self._hide(bid + '-mirror-row');
         self._hide(bid + '-selects');
         self._hide(bid + '-log');
-        self._setStatus(bid, '检查中...', '#888');
+        self._setStatus(bid, _('Checking...'), '#888');
         callGetUpstreamVersion(project, mirror).then(function() {
             self._pollStatus(project, bid, 'check');
         }).catch(function(err) {
             if (checkBtn) checkBtn.disabled = false;
-            self._setStatus(bid, '✗ 启动失败: ' + String(err), '#dc3545');
+            self._setStatus(bid, '✗ ' + _('Start failed: ') + String(err), '#dc3545');
             self._show(bid + '-mirror-row', true);
         });
     },
@@ -385,7 +385,7 @@ return view.extend({
         var fname  = fileEl ? fileEl.value : '';
 
         if (!tag || !fname) {
-            self._setStatus(bid, '✗ 请先检查版本', '#dc3545');
+            self._setStatus(bid, '✗ ' + _('Please check version first'), '#dc3545');
             return;
         }
 
@@ -394,20 +394,20 @@ return view.extend({
 
         if (btn) btn.disabled = true;
         self._hide(bid + '-mirror-row');
-        self._showLog(bid, '准备下载...');
-        self._setStatus(bid, '下载中...', '#888');
+        self._showLog(bid, _('Preparing download...'));
+        self._setStatus(bid, _('Downloading...'), '#888');
 
         callDoUpdate(project, tag, fname, upx).then(function(r) {
             if (!r || r.result !== 'ok') {
                 if (btn) btn.disabled = false;
-                self._setStatus(bid, '✗ 启动下载失败', '#dc3545');
+                self._setStatus(bid, '✗ ' + _('Start download failed'), '#dc3545');
                 self._show(bid + '-mirror-row', true);
                 return;
             }
             self._pollStatus(project, bid, 'download');
         }).catch(function(err) {
             if (btn) btn.disabled = false;
-            self._setStatus(bid, '✗ 错误: ' + String(err), '#dc3545');
+            self._setStatus(bid, '✗ ' + _('Error: ') + String(err), '#dc3545');
             self._show(bid + '-mirror-row', true);
         });
     },
@@ -434,37 +434,37 @@ return view.extend({
                 if (done || !s) return;
                 var dot = '.'.repeat(dots % 4 + 1);
                 if (s.status === 'checking') {
-                    self._setStatus(bid, '检查中' + dot, '#888');
+                    self._setStatus(bid, _('Checking') + dot, '#888');
                     return;
                 }
                 if (s.status === 'downloading') {
                     if (s.log) self._showLog(bid, s.log);
-                    self._setStatus(bid, '下载中' + dot, '#888');
+                    self._setStatus(bid, _('Downloading') + dot, '#888');
                     return;
                 }
                 if (s.status === 'installing' || s.status === 'processing') {
                     if (s.log) self._showLog(bid, s.log);
-                    self._setStatus(bid, '安装中...', '#888');
+                    self._setStatus(bid, _('Installing...'), '#888');
                     return;
                 }
                 stopAll();
                 if (s.status === 'ready') {
                     if (checkBtn) checkBtn.disabled = false;
-                    self._setStatus(bid, '✓ 找到 ' + s.count + ' 个版本', '#28a745');
+                    self._setStatus(bid, '✓ ' + _('Found ') + s.count + ' ' + _('versions'), '#28a745');
                     self._populateReleases(s.releases, bid);
                     self._show(bid + '-selects');
                     return;
                 }
                 if (s.status === 'done') {
                     if (btn) btn.disabled = false;
-                    self._setStatus(bid, '✓ 安装完成：' + (s.installed || ''), '#28a745');
+                    self._setStatus(bid, '✓ ' + _('Installation complete: ') + (s.installed || ''), '#28a745');
                     if (s.log) self._showLog(bid, s.log);
                     return;
                 }
                 if (s.status === 'error') {
                     if (checkBtn) checkBtn.disabled = false;
                     if (btn)      btn.disabled      = false;
-                    self._setStatus(bid, '✗ ' + (s.msg || '失败'), '#dc3545');
+                    self._setStatus(bid, '✗ ' + (s.msg || _('Failed')), '#dc3545');
                     if (s.log) self._showLog(bid, s.log);
                     self._show(bid + '-mirror-row', true);
                     return;
@@ -478,7 +478,7 @@ return view.extend({
             stopAll();
             if (checkBtn) checkBtn.disabled = false;
             if (btn)      btn.disabled      = false;
-            self._setStatus(bid, '✗ 超时，请重试', '#dc3545');
+            self._setStatus(bid, '✗ ' + _('Timeout, please retry'), '#dc3545');
             self._show(bid + '-mirror-row', true);
         }, timeoutMs);
     },

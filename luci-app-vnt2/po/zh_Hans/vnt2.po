@@ -1,0 +1,567 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Basic Info"
+msgstr "基本信息"
+
+msgid "IP List"
+msgstr "IP 列表"
+
+msgid "Clients"
+msgstr "客户端"
+
+msgid "Routes"
+msgstr "路由"
+
+msgid "Official"
+msgstr "官网"
+
+msgid "Start"
+msgstr "启动"
+
+msgid "Restart"
+msgstr "重启"
+
+msgid "Stop"
+msgstr "停止"
+
+msgid " days"
+msgstr "天"
+
+msgid " hrs"
+msgstr "时"
+
+msgid " mins"
+msgstr "分"
+
+msgid " secs"
+msgstr "秒"
+
+msgid " - Simple and efficient remote networking tool | "
+msgstr " - 简便高效的异地组网工具 | "
+
+msgid "VNT2 Overview"
+msgstr "VNT2 概览"
+
+msgid "Instance Status "
+msgstr "实例运行状态 "
+
+msgid "running"
+msgstr "个运行中"
+
+msgid "total"
+msgstr "个"
+
+msgid "Start All"
+msgstr "全部启动"
+
+msgid "Restart All"
+msgstr "全部重启"
+
+msgid "Stop All"
+msgstr "全部停止"
+
+msgid "Node Info"
+msgstr "节点信息"
+
+msgid "\u26a0 Binary files missing: "
+msgstr "\u26a0 程序文件缺失："
+
+msgid "Please go to "
+msgstr "请前往 "
+
+msgid "Settings & Update"
+msgstr "设置与更新"
+
+msgid " page to download and install."
+msgstr " 页面下载安装。"
+
+msgid "No instances yet. Please create one in client or server config page first."
+msgstr "暂无实例，请先在客户端或服务端配置页新建实例。"
+
+msgid "Instance Name"
+msgstr "实例名称"
+
+msgid "Type"
+msgstr "实例类型"
+
+msgid "Uptime"
+msgstr "运行时间"
+
+msgid "CPU/RAM"
+msgstr "CPU／RAM"
+
+msgid "Quick Actions"
+msgstr "快捷操作"
+
+msgid "Client"
+msgstr "客户端"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Enter Web Admin"
+msgstr "进入 Web 管理"
+
+msgid 'Instance "'
+msgstr "实例 \""
+
+msgid " success"
+msgstr " 成功"
+
+msgid " failed: "
+msgstr " 失败："
+
+msgid "Unknown error"
+msgstr "未知错误"
+
+msgid "Operation failed: "
+msgstr "操作失败："
+
+msgid "All "
+msgstr "全部 "
+
+msgid " commands sent"
+msgstr " 指令已发送"
+
+msgid "No "
+msgstr "没有"
+
+msgid "stopped"
+msgstr "已停止"
+
+msgid " instances available for "
+msgstr "的实例可供"
+
+msgid " partially failed: "
+msgstr " 部分失败："
+
+msgid "Batch "
+msgstr "批量"
+
+msgid "No running client instances."
+msgstr "暂无运行中的客户端实例。"
+
+msgid "Select instance: "
+msgstr "选择实例："
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "Non-client instance"
+msgstr "非客户端实例"
+
+msgid "Control port disabled"
+msgstr "控制端口已禁用"
+
+msgid "No data"
+msgstr "暂无数据"
+
+msgid "Loading failed"
+msgstr "加载失败"
+
+msgid "Client"
+msgstr "客户端"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Discard changes"
+msgstr "放弃修改"
+
+msgid "Unsaved changes will be lost when switching tabs, are you sure?"
+msgstr "有未保存的修改切换标签将丢失，确定吗？"
+
+msgid "There are unsaved changes, are you sure to discard and return?"
+msgstr "有未保存的修改，确定放弃并返回吗？"
+
+msgid "No "
+msgstr "暂无"
+
+msgid " config yet, click \"New Config\" to add."
+msgstr "配置，点击\"新建配置\"开始添加。"
+
+msgid "Enabled"
+msgstr "启用"
+
+msgid "Config Name"
+msgstr "配置名称"
+
+msgid "Start Method"
+msgstr "启动方式"
+
+msgid "Current Status"
+msgstr "当前状态"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "New "
+msgstr "新建"
+
+msgid "Edit "
+msgstr "编辑"
+
+msgid "Config"
+msgstr "配置"
+
+msgid "Config Name: "
+msgstr "配置名称："
+
+msgid "Letters, numbers, underscore, hyphen"
+msgstr "字母、数字、下划线、连字符"
+
+msgid "Name can only contain letters, numbers, underscore, hyphen"
+msgstr "名称只能包含字母、数字、下划线、连字符"
+
+msgid "Config name already exists"
+msgstr "配置名称已存在"
+
+msgid "Back to list"
+msgstr "返回列表"
+
+msgid "Save Config"
+msgstr "保存配置"
+
+msgid "Template fields are empty, please check the template file."
+msgstr "模板字段为空，请检查模板文件。"
+
+msgid "Please select"
+msgstr "请选择"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Enabled"
+msgstr "已启用"
+
+msgid "Add row"
+msgstr "添加一行"
+
+msgid "Delete row"
+msgstr "删除此行"
+
+msgid "Required"
+msgstr "必填"
+
+msgid "The following required fields are not filled: "
+msgstr "以下必填项未填写："
+
+msgid "Save failed: "
+msgstr "保存失败："
+
+msgid "Instance enabled, restarting..."
+msgstr "实例已启用，正在重启..."
+
+msgid '\" restart successful'
+msgstr '\" 重启成功'
+
+msgid "Restart failed: "
+msgstr "重启失败："
+
+msgid "Restart error: "
+msgstr "重启出错："
+
+msgid "Save error: "
+msgstr "保存出错："
+
+msgid 'Instance "'
+msgstr "实例 \""
+
+msgid '\" is running, will be stopped after deletion, continue?'
+msgstr '\" 正在运行，删除后将自动停止，确定吗？'
+
+msgid 'Are you sure you want to delete config "'
+msgstr "确定要删除配置 \""
+
+msgid "Confirm Delete"
+msgstr "确认删除"
+
+msgid 'Config "'
+msgstr "配置 \""
+
+msgid '\" deleted'
+msgstr '\" 已删除'
+
+msgid "Delete failed: "
+msgstr "删除失败："
+
+msgid "VNT2 Config Management"
+msgstr "VNT2 配置管理"
+
+msgid "Config"
+msgstr "配置"
+
+msgid "New Config"
+msgstr "新建配置"
+
+msgid "Save & Apply"
+msgstr "保存并应用"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Confirm"
+msgstr "确认"
+
+msgid "Disabled"
+msgstr "未启用"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Not running"
+msgstr "未运行"
+
+msgid "VNT2 Settings & Update"
+msgstr "VNT2 设置与更新"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Basic Settings"
+msgstr "基本设置"
+
+msgid "Binary Path"
+msgstr "二进制程序路径"
+
+msgid "Program file directory, default /usr/bin"
+msgstr "程序文件所在目录，默认 /usr/bin"
+
+msgid "Config Path"
+msgstr "配置文件路径"
+
+msgid "Configuration file storage directory, default /etc/vnt2_config"
+msgstr "配置文件存储目录，默认 /etc/vnt2_config"
+
+msgid "Device Architecture"
+msgstr "设备架构"
+
+msgid "Current detection: "
+msgstr "当前检测："
+
+msgid "Unknown"
+msgstr "未知"
+
+msgid "Download Mirror"
+msgstr "下载镜像源"
+
+msgid "Multiple mirrors ensure successful download"
+msgstr "多镜像源确保成功下载"
+
+msgid "Auto Update"
+msgstr "自动更新"
+
+msgid "Enable auto update"
+msgstr "启用自动更新"
+
+msgid "Automatically check and update programs periodically"
+msgstr "定期自动检查并更新程序"
+
+msgid "Update Interval (days)"
+msgstr "更新间隔（天）"
+
+msgid "Interval days for automatic update check"
+msgstr "自动检查更新的间隔天数"
+
+msgid "UPX Compression"
+msgstr "UPX 压缩"
+
+msgid "Compress with UPX after installation"
+msgstr "安装后使用 UPX 压缩"
+
+msgid "Can significantly reduce program file size"
+msgstr "可显著减小程序文件体积"
+
+msgid "Firewall Forwarding"
+msgstr "防火墙转发"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Allow virtual network to access local LAN"
+msgstr "允许虚拟网络访问本地局域网"
+
+msgid "Allow local LAN to access virtual network"
+msgstr "允许本地局域网访问虚拟网络"
+
+msgid "Allow virtual network to access WAN"
+msgstr "允许虚拟网络访问外网"
+
+msgid "Allow WAN to access virtual network"
+msgstr "允许外网访问虚拟网络"
+
+msgid "VNT Web WAN Access"
+msgstr "VNT Web 外网访问"
+
+msgid "Requires web_addr configuration"
+msgstr "需配置 web_addr"
+
+msgid "VNTS Web WAN Access"
+msgstr "VNTS Web 外网访问"
+
+msgid "Requires web_bind configuration"
+msgstr "需配置 web_bind"
+
+msgid "Current Version Info"
+msgstr "当前版本信息"
+
+msgid "Component"
+msgstr "组件"
+
+msgid "Version"
+msgstr "版本"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Installed"
+msgstr "已安装"
+
+msgid "Not installed"
+msgstr "未安装"
+
+msgid "Check Update"
+msgstr "检查更新"
+
+msgid "LuCI Plugin (luci-app-vnt2)"
+msgstr "LuCI 插件（luci-app-vnt2）"
+
+msgid "VNT Client (vnt2_cli / vnt2_web / vnt2_ctrl)"
+msgstr "VNT 客户端（vnt2_cli / vnt2_web / vnt2_ctrl）"
+
+msgid "VNTS Server (vnts2))"
+msgstr "VNTS 服务端（vnts2）"
+
+msgid "Check upstream version"
+msgstr "检查上游版本"
+
+msgid "Click to check for version info"
+msgstr "点击检查获取版本信息"
+
+msgid "Switch mirror and retry:"
+msgstr "切换镜像源重试："
+
+msgid "Retry"
+msgstr "重试"
+
+msgid "Version: "
+msgstr "版本："
+
+msgid "File: "
+msgstr "文件："
+
+msgid "Update Now"
+msgstr "立即更新"
+
+msgid "Checking..."
+msgstr "检查中..."
+
+msgid "Start failed: "
+msgstr "启动失败: "
+
+msgid "Please check version first"
+msgstr "请先检查版本"
+
+msgid "Preparing download..."
+msgstr "准备下载..."
+
+msgid "Downloading..."
+msgstr "下载中..."
+
+msgid "Start download failed"
+msgstr "启动下载失败"
+
+msgid "Error: "
+msgstr "错误: "
+
+msgid "Checking"
+msgstr "检查中"
+
+msgid "Downloading"
+msgstr "下载中"
+
+msgid "Installing..."
+msgstr "安装中..."
+
+msgid "Found "
+msgstr "找到 "
+
+msgid "versions"
+msgstr "个版本"
+
+msgid "Installation complete: "
+msgstr "安装完成："
+
+msgid "Failed"
+msgstr "失败"
+
+msgid "Timeout, please retry"
+msgstr "超时，请重试"
+
+msgid "VNT2 Logs"
+msgstr "VNT2 日志"
+
+msgid "No instances"
+msgstr "暂无实例"
+
+msgid "Stopped"
+msgstr "已停止"
+
+msgid "All"
+msgstr "全部"
+
+msgid "Last "
+msgstr "最近 "
+
+msgid "lines"
+msgstr "行"
+
+msgid "Clear Logs"
+msgstr "清理日志"
+
+msgid "Scroll to Top"
+msgstr "滚到顶部"
+
+msgid "Scroll to Bottom"
+msgstr "滚到底部"
+
+msgid "Instance: "
+msgstr "实例："
+
+msgid "Auto refresh (5s)"
+msgstr "自动刷新(5s)"
+
+msgid "(No logs)"
+msgstr "（暂无日志）"
+
+msgid "(No logs, instance may not be started yet or has no output)"
+msgstr "（暂无日志，实例可能尚未启动或未产生输出）"
+
+msgid "Failed to load logs"
+msgstr "加载日志失败"
+
+msgid "Partial save failed"
+msgstr "部分保存失败"
+
+msgid "Configuration saved"
+msgstr "配置已保存"
+
+msgid "Save error: "
+msgstr "保存出错："
+
+msgid "Running"
+msgstr "运行中"

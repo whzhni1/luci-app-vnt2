@@ -82,7 +82,7 @@ return view.extend({
         self._currentInstance = instances.length ? instances[0].name : null;
 
         var node = E('div', { 'class':'cbi-map' }, [
-            E('h2', {}, 'VNT2 日志'),
+            E('h2', {}, _('VNT2 Logs')),
             E('div', { 'class':'cbi-section' }, [
                 self._renderToolbar(),
                 E('pre', {
@@ -95,7 +95,7 @@ return view.extend({
                         'white-space:pre-wrap', 'word-break:break-all',
                         'margin-top:12px'
                     ].join(';')
-                }, self._currentInstance ? '加载中...' : '暂无实例')
+                }, self._currentInstance ? _('Loading...') : _('No instances'))
             ])
         ]);
 
@@ -114,8 +114,8 @@ return view.extend({
     },
 
     _instLabel: function(inst) {
-        var type   = inst.type === 'vnt' ? '客户端' : '服务端';
-        var status = inst.running ? '运行中' : '已停止';
+        var type   = inst.type === 'vnt' ? _('Client') : _('Server');
+        var status = inst.running ? _('Running') : _('Stopped');
         return inst.name + ' (' + type + ' · ' + status + ')';
     },
 
@@ -136,7 +136,7 @@ return view.extend({
                 if (inst.name === self._currentInstance) a['selected'] = 'selected';
                 return E('option', a, self._instLabel(inst));
               })
-            : [E('option', { 'value':'' }, '暂无实例')]
+            : [E('option', { 'value':'' }, _('No instances'))]
         );
 
         var linesSelect = E('select', {
@@ -147,7 +147,7 @@ return view.extend({
         }, LINE_OPTIONS.map(function(n) {
             var a = { 'value': String(n) };
             if (n === 200) a['selected'] = 'selected';
-            return E('option', a, n === 0 ? '全部' : '最近 ' + n + ' 行');
+            return E('option', a, n === 0 ? _('All') : _('Last ') + n + ' ' + _('lines'));
         }));
 
         var autoCheck = E('input', {
@@ -157,10 +157,10 @@ return view.extend({
         });
 
         var btns = [
-            { label:'刷新',     cls:'btn cbi-button-action',  fn: function() { self._loadLog(); }  },
-            { label:'清理日志', cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
-            { label:'滚到顶部', cls:'btn',                     fn: function() { scrollLog(false); } },
-            { label:'滚到底部', cls:'btn',                     fn: function() { scrollLog(true);  } },
+            { label:_('Refresh'),     cls:'btn cbi-button-action',  fn: function() { self._loadLog(); }  },
+            { label:_('Clear Logs'), cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
+            { label:_('Scroll to Top'), cls:'btn',                  fn: function() { scrollLog(false); } },
+            { label:_('Scroll to Bottom'), cls:'btn',               fn: function() { scrollLog(true);  } },
         ];
 
         return E('div', {
@@ -170,11 +170,11 @@ return view.extend({
                 'margin-bottom:12px'
             ].join(';')
         }, [
-            E('label', {}, '实例：'),
+            E('label', {}, _('Instance: ')),
             instanceSelect,
             linesSelect,
             E('label', { 'style':'cursor:pointer;user-select:none;' },
-                [autoCheck, '自动刷新(5s)']),
+                [autoCheck, _('Auto refresh (5s)')]),
         ].concat(btns.map(function(b) {
             return E('button', { 'class':b.cls, 'click':b.fn }, b.label);
         })));
@@ -205,10 +205,10 @@ return view.extend({
         if (!instances.length) {
             var opt         = document.createElement('option');
             opt.value       = '';
-            opt.textContent = '暂无实例';
+            opt.textContent = _('No instances');
             sel.appendChild(opt);
             var el = getLogEl();
-            if (el) el.textContent = '暂无实例';
+            if (el) el.textContent = _('No instances');
             return;
         }
 
@@ -254,7 +254,7 @@ return view.extend({
         if (!hasContent)
             el.appendChild(E('span', {
                 'style': 'color:#888;font-style:italic;'
-            }, '（暂无日志）'));
+            }, _('(No logs)')));
 
         el.scrollTop = el.scrollHeight;
     },
@@ -266,7 +266,7 @@ return view.extend({
         var lines   = linesEl ? parseInt(linesEl.value) : 200;
         var linesArg = lines === 0 ? null : lines;
         var el = getLogEl();
-        if (el) el.textContent = '加载中...';
+        if (el) el.textContent = _('Loading...');
 
         callGetLog(self._currentInstance, linesArg).then(function(r) {
             var content = (r && r.content) || '';
@@ -276,14 +276,14 @@ return view.extend({
                     el2.innerHTML = '';
                     el2.appendChild(E('span', {
                         'style': 'color:#888;font-style:italic;'
-                    }, '（暂无日志，实例可能尚未启动或未产生输出）'));
+                    }, _('(No logs, instance may not be started yet or has no output)')));
                 }
                 return;
             }
             self._formatLog(content);
         }).catch(function() {
             var el2 = getLogEl();
-            if (el2) el2.textContent = '加载日志失败';
+            if (el2) el2.textContent = _('Failed to load logs');
         });
     },
 

@@ -8,7 +8,7 @@
     "icon": "wifi"
   },
   "admin/vpn/vnt2/overview": {
-    "title": "概览",
+    "title": "Overview",
     "order": 10,
     "action": {
       "type": "view",
@@ -16,7 +16,7 @@
     }
   },
   "admin/vpn/vnt2/config": {
-    "title": "配置管理",
+    "title": "Config Management",
     "order": 20,
     "action": {
       "type": "view",
@@ -24,7 +24,7 @@
     }
   },
   "admin/vpn/vnt2/log": {
-    "title": "日志",
+    "title": "Logs",
     "order": 30,
     "action": {
       "type": "view",
@@ -32,7 +32,7 @@
     }
   },
   "admin/vpn/vnt2/settings": {
-    "title": "设置与更新",
+    "title": "Settings & Update",
     "order": 40,
     "action": {
       "type": "view",
