@@ -20,7 +20,7 @@ endef
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
-BIN_PATH=/usr/bin/vnt2
+BIN_PATH=/usr/bin/vnt2_cli
 INITD=/etc/init.d
 if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     ARCH=$$(uname -m)
