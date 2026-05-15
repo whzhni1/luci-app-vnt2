@@ -1,5 +1,5 @@
 #!/bin/sh
-# /usr/libexec/vnt2-run.sh # VNT2 wrapper v1.0
+# /usr/libexec/vnt2-run.sh # VNT2 wrapper v1.1
 
 NAME="$1"
 LOG_FILE="$2"
@@ -28,7 +28,11 @@ format_line() {
     local ts
     ts=$(date '+%Y-%m-%d %H:%M:%S')
     printf '%s\n' "$1" \
-        | sed "s/^\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)T\([0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\)\.[^[:space:]]* /[${ts}] /"
+        | sed "s/^\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)T\([0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\)\.[^[:space:]]* /[${ts}] /" \
+        | sed 's/\] INFO /\] 系统 /g;
+               s/\] WARN /\] 警告 /g;
+               s/\] ERROR /\] 错误 /g;
+               s/\] DEBUG /\] 调试 /g'
 }
 
 rotate_log

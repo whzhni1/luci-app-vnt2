@@ -19,10 +19,10 @@ var MONTH_MAP = {
 };
 
 var LOG_COLORS = [
-    [/\b(ERROR|error|ERR)\b/,   '#f04040'],
-    [/\b(WARN|warn|WARNING)\b/, '#f0c040'],
-    [/\b(INFO|info)\b/,         '#6ab0f5'],
-    [/\b(DEBUG|debug)\b/,       '#888888'],
+    [/\] 错误 /, '#f04040'],
+    [/\] 警告 /, '#f0c040'],
+    [/\] 系统 /, '#6ab0f5'],
+    [/\] 调试 /, '#888888'],
 ];
 
 function getLogEl() {

@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.3
+# VNT2 更新脚本 v1.4
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -384,9 +384,10 @@ auto_update_one() {
 cmd_auto_update() {
     load_uci
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始自动更新 mirror=$MIRROR arch=$ARCH"
-    for proj in vnt vnts luci-app-vnt2; do
+    local projects="${*:-vnt vnts luci-app-vnt2}"
+    for proj in $projects; do
         auto_update_one "$proj" || true
-        echo "[$proj] $(cat "$(status_file "$proj")" 2>/dev/null)"
+        log "auto" "[$proj] $(cat "$(status_file "$proj")" 2>/dev/null)"
     done
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 完成"
@@ -395,5 +396,5 @@ cmd_auto_update() {
 case "$1" in
     check)    cmd_check    "$2" "$3"           ;;
     download) cmd_download "$2" "$3" "$4" "$5" ;;
-    *)        cmd_auto_update                  ;;
+    *)        cmd_auto_update "$@"             ;;
 esac
