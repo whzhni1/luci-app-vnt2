@@ -30,7 +30,7 @@ if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
 fi
 if [ ! -x "$${BIN_PATH}" ]; then
     echo "开始自动下载vnt2/vnts2 ……"
-    [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh &
+    [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh vnt vnts &
 fi
 $${INITD}/vnt2 enable
 (sleep 3
