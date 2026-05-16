@@ -5,7 +5,7 @@ LUCI_DEPENDS:=+luci-base +luci-compat +kmod-tun
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-vnt2
-PKG_VERSION:=1.5.1
+PKG_VERSION:=1.5.2
 PKG_RELEASE:=1
 
 LUCI_MINIFY_JS:=0
@@ -20,7 +20,6 @@ endef
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
-BIN_PATH=/usr/bin/vnt2_cli
 INITD=/etc/init.d
 if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     ARCH=$$(uname -m)
@@ -28,10 +27,7 @@ if [ -z "$$(uci -q get vnt2.global.arch 2>/dev/null)" ]; then
     uci set vnt2.global.arch="$${ARCH}"
     uci commit vnt2
 fi
-if [ ! -x "$${BIN_PATH}" ]; then
-    echo "开始自动下载vnt2/vnts2 ……"
-    [ -x /usr/libexec/vnt2-update.sh ] && /usr/libexec/vnt2-update.sh vnt vnts &
-fi
+
 $${INITD}/vnt2 enable
 (sleep 3
  $${INITD}/rpcd restart
