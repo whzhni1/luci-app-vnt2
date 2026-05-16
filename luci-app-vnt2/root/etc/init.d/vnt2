@@ -482,7 +482,7 @@ start_service() {
         [ -x "$UPDATE_SCRIPT" ] && ! [ -f /tmp/vnt2_downloading ] && {
             touch /tmp/vnt2_downloading
             echo "开始自动下载vnt2/vnts2..."
-            { $UPDATE_SCRIPT vnt vnts > /dev/null 2>&1; rm -f /tmp/vnt2_downloading; } &
+            setsid sh -c "$UPDATE_SCRIPT vnt vnts > /dev/null 2>&1; rm -f /tmp/vnt2_downloading" &
         }
         return 0
     fi
