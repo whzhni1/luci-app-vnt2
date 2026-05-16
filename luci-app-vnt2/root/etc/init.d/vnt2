@@ -478,6 +478,14 @@ service_triggers() {
 start_service() {
     init_paths
     echo "VNT2: 启动所有已启用实例..."
+    if [ ! -x "${BIN_PATH}/vnt2_cli" ] || [ ! -x "${BIN_PATH}/vnts2" ]; then
+        [ -x "$UPDATE_SCRIPT" ] && ! [ -f /tmp/vnt2_downloading ] && {
+            touch /tmp/vnt2_downloading
+            echo "开始自动下载vnt2/vnts2..."
+            { $UPDATE_SCRIPT vnt vnts > /dev/null 2>&1; rm -f /tmp/vnt2_downloading; } &
+        }
+        return 0
+    fi
     each_enabled_instance _do_start_instance
     rebuild_network_interfaces
     rebuild_firewall
