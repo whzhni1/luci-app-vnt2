@@ -19,7 +19,7 @@ var callSetEnabled        = rpcDeclare('set_enabled',         ['type','configs']
 var callGetEnabled        = rpcDeclare('get_enabled',         ['type']);
 var callInstanceAction  = rpcDeclare('instance_action',  ['name', 'action']);
 
-var TABS          = { vnt:'客户端', vnts:'服务端' };
+var TABS          = { vnt:_('Client'), vnts:_('Server') };
 var START_METHODS = { vnt:['vnt2_cli','vnt2_web'], vnts:['vnts2'] };
 
 var _tab             = (location.hash === '#vnts') ? 'vnts' : 'vnt';
@@ -78,10 +78,10 @@ function saveListState(self) {
     return Promise.all(promises).then(function(results) {
         var failed = results.filter(function(r) { return r && r.result !== 'ok'; });
         if (failed.length) {
-            self._ui.notify('部分保存失败', 'error');
+            self._ui.notify(_('Partial save failed'), 'error');
             return;
         }
-        self._ui.notify('配置已保存', 'success');
+        self._ui.notify(_('配置已保存'), 'success');
         return new Promise(function(resolve) {
             window.setTimeout(function() {
                 refreshStatus(self).then(function() {
@@ -90,7 +90,7 @@ function saveListState(self) {
             }, 3000);
         });
     }).catch(function(err) {
-        self._ui.notify('保存出错：' + String(err), 'error');
+        self._ui.notify(_('Save error: ') + String(err), 'error');
     });
 }
 
@@ -120,7 +120,7 @@ function switchTab(self, tab) {
         }
     }
     if (editing && _dirty) {
-        self._ui.confirm('放弃修改', '有未保存的修改切换标签将丢失，确定吗？')
+        self._ui.confirm(_('Discard changes'), _('Unsaved changes will be lost when switching tabs, are you sure?'))
             .then(function(ok) { if (ok) doSwitch(); });
     } else {
         doSwitch();
@@ -168,9 +168,9 @@ function buildTable(self) {
     var configs = self._configs[_tab] || [];
     if (!configs.length)
         return E('p', { 'class':'vnt2-empty' },
-            '暂无' + TABS[_tab] + '配置，点击"新建配置"开始添加。');
+            _('No ') + TABS[_tab] + _(' config yet, click "New Config" to add.'));
     var thStyle = 'padding:8px 12px;text-align:center;';
-    var heads   = ['启用', '配置名称', '启动方式', '当前状态', '操作'];
+    var heads   = [_('Enabled'), _('Config Name'), _('Start Method'), _('Current Status'), _('Actions')];
     return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;' },
         E('table', {
             'class': 'vnt2-table',
@@ -212,12 +212,12 @@ function buildRow(self, cfg) {
         'class': 'btn cbi-button-edit',
         'style': 'margin-right:6px;',
         'click': function() { openEditor(self, name, false); }
-    }, '编辑');
+    }, _('Edit'));
 
     var btnDel = E('button', {
         'class': 'btn cbi-button-negative',
         'click': function() { deleteConfig(self, name); }
-    }, '删除');
+    }, _('Delete'));
 
     var statusCell = E('td', { 'class':'vnt2-status-cell', 'style':tdStyle },
         self._ui.statusBadge(state.enabled ? (self._status && self._status[name]) : null));
@@ -312,7 +312,7 @@ if (isNew && tab === 'vnt') {
         'class':       'cbi-input-text',
         'style':       'width:auto;',
         'value':       name || '',
-        'placeholder': '字母、数字、下划线、连字符'
+        'placeholder': _('Letters, numbers, underscore, hyphen')
     });
     nameInput.addEventListener('input', function() {
     _dirty = true;
@@ -327,7 +327,7 @@ if (isNew && tab === 'vnt') {
 
     function backToList() {
         if (_dirty) {
-            self._ui.confirm('放弃修改', '有未保存的修改，确定放弃并返回吗？')
+            self._ui.confirm(_('Discard changes'), _('There are unsaved changes, are you sure to discard and return?'))
                 .then(function(ok) { if (ok) { _dirty = false; showList(); } });
         } else {
             showList();
@@ -340,38 +340,38 @@ if (isNew && tab === 'vnt') {
                 E('span', { 'class':'vnt2-breadcrumb-link', 'click':backToList },
                     TABS[tab] + '配置列表'),
                 E('span', { 'class':'vnt2-breadcrumb-sep' }, ' › '),
-                E('span', {}, (isNew ? '新建' : '编辑') + '配置')
+                E('span', {}, (isNew ? _('New ') : _('Edit ')) + _('Config'))
             ]),
             E('div', { 'style':'display:flex;align-items:center;margin-top:8px;' }, [
                 E('label', { 'style':'font-weight:bold;margin-right:6px;flex-shrink:0;' },
-                    '配置名称：'),
+                    _('Config Name: ')),
                 nameInput,
                 nameErr
             ])
         ]),
         E('div', { 'class':'vnt2-edit-body' }, formEl),
         E('div', {'class': 'vnt2-edit-footer', 'style': 'padding-top:60px;display:flex;gap:8px;' }, [
-            E('button', { 'class':'btn', 'click':backToList }, '← 返回列表'),
+            E('button', { 'class':'btn', 'click':backToList        }, '← ' + _('Back to list')),
             E('button', {
                 'class': 'btn cbi-button-save',
                 'click': function() {
                     var newName = nameInput.value.trim();
                     if (!newName || !/^[\w-]+$/.test(newName)) {
-                        nameErr.textContent   = '名称只能包含字母、数字、下划线、连字符';
+                        nameErr.textContent   = _('Name can only contain letters, numbers, underscore, hyphen');
                         nameErr.style.display = 'inline';
                         nameInput.focus();
                         return;
                     }
                     if (isNew && self._configs[tab] &&
                         self._configs[tab].some(function(c) { return c.name === newName; })) {
-                        nameErr.textContent   = '配置名称已存在';
+                        nameErr.textContent   = _('Config name already exists');
                         nameErr.style.display = 'inline';
                         nameInput.focus();
                         return;
                     }
                     saveConfig(self, name, newName, tab, formEl, fields, res.content);
                 }
-            }, '保存配置')
+            }, _('Save Config'))
         ])
     ]);
 }
@@ -379,7 +379,7 @@ if (isNew && tab === 'vnt') {
 function buildForm(fields, values) {
     var form = E('div', { 'class':'vnt2-dyn-form' });
     if (!fields.length) {
-        form.appendChild(E('p', { 'class':'vnt2-hint' }, '模板字段为空，请检查模板文件。'));
+        form.appendChild(E('p', { 'class':'vnt2-hint' }, _('Template fields are empty, please check the template file.')));
         return form;
     }
     fields.forEach(function(f) { form.appendChild(buildFormRow(f, values)); });
@@ -387,7 +387,7 @@ function buildForm(fields, values) {
 }
 
 function getPlaceholder(f) {
-    var m = (f.comment || '').match(/示例[：:]\s*(\S+)/);
+    var m = (f.comment || '').match(/Example[：:]\s*(\S+)/);
     return m ? m[1] : '';
 }
 
@@ -395,12 +395,12 @@ function buildFormRow(f, values) {
     var val = Object.prototype.hasOwnProperty.call(values, f.name)
         ? values[f.name]
         : (f.type === 'section' ? {} : f['default']);
-    var isRequired  = !!(f.comment && f.comment.indexOf('必填') !== -1);
+    var isRequired  = !!(f.comment && f.comment.indexOf(_('Required')) !== -1);
     var nameEl      = E('div', { 'class':'vnt2-field-name' });
     nameEl.appendChild(document.createTextNode(f.name));
     if (isRequired) nameEl.appendChild(E('span', { 'class':'vnt2-required-star' }, ' *'));
     var commentText = (f.comment || '')
-        .replace(/示例[：:]\s*\S+/g, '')
+        .replace(/Example[：:]\s*\S+/g, '')
         .replace(/\s+/g, ' ')
         .trim();
     return E('div', { 'class':'vnt2-field-row' }, [
@@ -428,14 +428,14 @@ function buildInput(f, val, isRequired) {
 
 function buildBool(f, val) {
     var checked = (val === 'true' || val === true);
-    var span    = E('span', { 'class':'vnt2-bool-label' }, checked ? '已启用' : '已禁用');
+    var span    = E('span', { 'class':'vnt2-bool-label' }, checked ? _('Enabled') : _('Disabled'));
     var cb      = E('input', {
         'type': 'checkbox', 'class': 'vnt2-checkbox',
         'data-field-name': f.name, 'data-field-type': 'bool'
     });
     if (checked) cb.setAttribute('checked', 'checked');
     cb.addEventListener('change', function() {
-        span.textContent = cb.checked ? '已启用' : '已禁用';
+        span.textContent = cb.checked ? _('Enabled') : _('Disabled');
     });
     return E('label', { 'class':'vnt2-bool-wrap' }, [cb, span]);
 }
@@ -460,7 +460,7 @@ function buildSelect(f, val) {
     });
     var options = [];
     if (!parsed.some(function(p) { return p.value === val; }) || val === '' || val == null)
-        options.push(E('option', { 'value':'' }, '— 请选择 —'));
+        options.push(E('option', { 'value':'' }, '— ' + _('Please select') + ' —'));
     parsed.forEach(function(p) {
         var a = { 'value':p.value };
         if (p.value === val) a['selected'] = 'selected';
@@ -505,7 +505,7 @@ function buildListField(f, items, cls) {
             'placeholder': getPlaceholder(f)
         });
         var btnAdd = E('button', {
-            'type': 'button', 'class': 'btn vnt2-array-btn-add', 'title': '添加一行',
+            'type': 'button', 'class': 'btn vnt2-array-btn-add', 'title': _('Add row'),
             'click': function(ev) {
                 ev.preventDefault();
                 var nr = addRow('');
@@ -517,7 +517,7 @@ function buildListField(f, items, cls) {
             }
         }, '+');
         var btnDel = E('button', {
-            'type': 'button', 'class': 'btn vnt2-array-btn-del', 'title': '删除此行',
+            'type': 'button', 'class': 'btn vnt2-array-btn-del', 'title': _('Delete row'),
             'click': function(ev) {
                 ev.preventDefault();
                 if (container.querySelectorAll('.vnt2-' + cls + '-row').length <= 1) {
@@ -606,7 +606,7 @@ function validate(fields, formEl) {
     });
     var errors = [];
     fields.forEach(function(f) {
-        if (!f.comment || f.comment.indexOf('必填') === -1) return;
+        if (!f.comment || f.comment.indexOf(_('Required')) === -1) return;
         if (f.type === 'array') {
             var c = formEl.querySelector(
                 '[data-field-name="' + f.name + '"][data-field-type="array"]'
@@ -637,7 +637,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
     loadListState(tab).then(function() {
         var errors = validate(fields, formEl);
         if (errors.length) {
-            self._ui.notify('以下必填项未填写：' + errors.join('、'), 'error');
+            self._ui.notify(_('The following required fields are not filled: ') + errors.join(', '), 'error');
             var first = formEl.querySelector('.vnt2-input-error');
             if (first) first.scrollIntoView({ behavior:'smooth', block:'center' });
             return;
@@ -648,7 +648,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
 
         callSaveConfig(newName, tab, content, oldName || '').then(function(r) {
             if (!r || r.result !== 'ok') {
-                self._ui.notify('保存失败：' + ((r && r.msg) || ''), 'error');
+                self._ui.notify(_('Save failed: ') + ((r && r.msg) || ''), 'error');
                 return;
             }
 
@@ -669,16 +669,16 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
 
             var state = _listState[tab][newName] || ensureState(tab, newName);
             if (state.enabled) {
-                self._ui.notify('实例已启用，正在重启...', 'success');
+                self._ui.notify(_('Instance enabled, restarting...'), 'success');
                 callInstanceAction(newName, 'restart').then(function(res) {
                     var ok = res && res.result === 'ok';
                     self._ui.notify(
-                        ok ? '实例 "' + newName + '" 重启成功'
-                           : '重启失败：' + ((res && res.msg) || '未知错误'),
+                        ok ? _('Instance "') + newName + _('" restart successful')
+                           : _('Restart failed: ') + ((res && res.msg) || _('Unknown error')),
                         ok ? 'success' : 'error'
                     );
                 }).catch(function(err) {
-                    self._ui.notify('重启出错：' + String(err), 'error');
+                    self._ui.notify(_('Restart error: ') + String(err), 'error');
                 });
             }
 
@@ -692,7 +692,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
                     saveListState(self);
                 });
         }).catch(function(err) {
-            self._ui.notify('保存出错：' + String(err), 'error');
+            self._ui.notify(_('Save error: ') + String(err), 'error');
         });
     });
 }
@@ -701,14 +701,14 @@ function deleteConfig(self, name) {
     var tab     = _tab;
     var running = !!(self._status && self._status[name]);
     var msg = running
-        ? '实例 "' + name + '" 正在运行，删除后将自动停止，确定吗？'
-        : '确定要删除配置 "' + name + '" 吗？';
+        ? _('Instance "') + name + _('" is running, will be stopped after deletion, continue?')
+        : _('Are you sure you want to delete config "') + name + '"?';
 
-    self._ui.confirm('确认删除', msg).then(function(ok) {
+    self._ui.confirm(_('Confirm Delete'), msg).then(function(ok) {
         if (!ok) return;
         callDeleteConfig(name, tab).then(function(r) {
             if (r && r.result === 'ok') {
-                self._ui.notify('配置 "' + name + '" 已删除', 'success');
+                self._ui.notify(_('Config "') + name + _('" deleted'), 'success');
                 delete _listState[tab][name];
                 return callListConfigs(tab).then(function(res) {
                     self._configs[tab] = (res && Array.isArray(res.configs))
@@ -716,7 +716,7 @@ function deleteConfig(self, name) {
                     rebuildTable(self);
                 });
             }
-            self._ui.notify('删除失败：' + ((r && r.msg) || ''), 'error');
+            self._ui.notify(_('Delete failed: ') + ((r && r.msg) || ''), 'error');
         });
     });
 }
@@ -759,7 +759,7 @@ return view.extend({
         startStatusTimer(self);
 
         var view = E('div', { 'class':'cbi-map' }, [
-            E('h2', {}, 'VNT2 配置管理'),
+            E('h2', {}, _('VNT2 Config Management')),
             E('div', { 'class':'cbi-section' }, [
                 E('div', {
                     'style': 'display:flex;border-bottom:2px solid #ddd;margin-bottom:16px;'
@@ -774,7 +774,7 @@ return view.extend({
                             'color:' + (active ? '#3498db' : '#666')
                         ].join(';'),
                         'click': function() { switchTab(self, t); }
-                    }, TABS[t] + '配置');
+                    }, TABS[t] + _('Config'));
                 })),
                 E('div', { 'id':'vnt2-list-wrap' }, [
                     E('div', {
@@ -784,14 +784,14 @@ return view.extend({
                         E('button', {
                             'class': 'btn cbi-button-add',
                             'click': function() { openEditor(self, '', true); }
-                        }, '+ 新建配置'),
+                        }, '+ ' + _('New Config')),
                         E('button', {
                             'class': 'btn cbi-button-save',
                             'click': function() { saveListState(self); }
-                        }, '保存并应用')
+                        }, _('Save & Apply')),
                     ]),
                     E('div', { 'id':'vnt2-table-wrap' },
-                        E('p', { 'class':'vnt2-loading' }, '加载中...')
+                        E('p', { 'class':'vnt2-loading' }, _('Loading...'))
                     )
                 ]),
                 E('div', { 'id':'vnt2-edit-wrap', 'style':'display:none;' })

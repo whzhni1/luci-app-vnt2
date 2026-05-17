@@ -282,11 +282,11 @@ var VNT2UI = {
                     E('button', {
                         'class':'btn', 'style':'margin-right:8px;',
                         'click': function() { L.ui.hideModal(); resolve(false); }
-                    }, '取消'),
+                    }, _('Cancel')),
                     E('button', {
                         'class':'btn cbi-button-action important',
                         'click': function() { L.ui.hideModal(); resolve(true); }
-                    }, '确认')
+                    }, _('Confirm'))
                 ])
             ]);
         });
@@ -294,10 +294,10 @@ var VNT2UI = {
 
     statusBadge: function(running) {
         if (running === undefined || running === null)
-            return E('span', { 'style':'color:#999;font-size:13px;' }, '未启用');
+            return E('span', { 'style':'color:#999;font-size:13px;' }, _('Disabled'));
         return E('span', {
             'style': 'color:' + (running ? '#28a745' : '#dc3545') + ';font-weight:bold;font-size:13px;'
-        }, running ? '✓ 运行中' : '✗ 未运行');
+        }, running ? '✓ ' + _('Running') : '✗ ' + _('Not running'));
     },
 
     buildFormRow: function(label, inputEl, desc) {

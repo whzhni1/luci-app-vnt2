@@ -14,10 +14,10 @@ var callGetCtrlInfo    = rpcDeclare('get_ctrl_info',    ['name', 'cmd']);
 var callGetCpuTicks    = rpcDeclare('get_cpu_ticks',    ['name']);
 
 var CTRL_TABS = [
-    { id:'info',    label:'基本信息' },
-    { id:'ips',     label:'IP 列表'  },
-    { id:'clients', label:'客户端'   },
-    { id:'route',   label:'路由'     }
+    { id:'info',    label:_('Basic Info') },
+    { id:'ips',     label:_('IP List')  },
+    { id:'clients', label:_('Clients')   },
+    { id:'route',   label:_('Routes')     }
 ];
 
 var BIN_KEYS = [
@@ -28,16 +28,16 @@ var BIN_KEYS = [
 ];
 
 var LINKS = [
-    ['http://rustvnt.com',                        '官网'  ],
+    ['http://rustvnt.com',                        _('Official')  ],
     ['https://github.com/vnt-dev/vnt',            'GitHub'],
     ['https://github.com/vnt-dev/VntApp',         'GUIApp'],
-    ['https://github.com/whzhni1/luci-app-vnt2', 'Luci'  ],
+    ['https://github.com/whzhni1/luci-app-vnt2', 'LuCI'  ],
 ];
 
 var ACTIONS = [
-    { id:'start',   label:'启动', needRunning:false },
-    { id:'restart', label:'重启', needRunning:true  },
-    { id:'stop',    label:'停止', needRunning:true  },
+    { id:'start',   label:_('Start'), needRunning:false },
+    { id:'restart', label:_('Restart'), needRunning:true  },
+    { id:'stop',    label:_('Stop'), needRunning:true  },
 ];
 
 var _lastTicks = {};
@@ -76,10 +76,10 @@ function formatUptime(seconds) {
     var m = Math.floor((seconds % 3600) / 60);
     var s = seconds % 60;
     var parts = [];
-    if (d > 0) parts.push(d + '天');
-    if (h > 0) parts.push(h + '时');
-    if (m > 0) parts.push(m + '分');
-    parts.push(s + '秒');
+    if (d > 0) parts.push(d + _(' days'));
+    if (h > 0) parts.push(h + _(' hrs'));
+    if (m > 0) parts.push(m + _(' mins'));
+    parts.push(s + _(' secs'));
     return parts.join('');
 }
 
@@ -124,50 +124,50 @@ return view.extend({
         self._activeCtrlTab    = 'info';
 
         var linkNodes = [E('span', {}, '💡 '), E('b', {}, 'VNT'),
-            E('span', {}, ' - 简便高效的异地组网工具 | ')];
+            E('span', {}, _(' - Simple and efficient remote networking tool | '))];
         LINKS.forEach(function(lk, i) {
             if (i > 0) linkNodes.push(E('span', {}, ' | '));
             linkNodes.push(E('a', { 'href':lk[0], 'target':'_blank' }, lk[1]));
         });
 
         var node = E('div', { 'class':'cbi-map' }, [
-            E('h2', {}, 'VNT2 概览'),
+            E('h2', {}, _('VNT2 Overview')),
             self._renderBinaryAlert(binaries),
             E('div', { 'class':'cbi-section' }, [
             E('div', { 'style':'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;' }, [
                 E('h3', { 'style':'margin:0;' }, [
-                    E('span', {}, '实例运行状态 '),
+                    E('span', {}, _('Instance Status ')),
                     E('span', {
                         'data-role': 'run-status',
                         'style':     'font-size:13px;font-weight:normal;color:#28a745;'
-                    }, instances.filter(function(i){ return i.running; }).length + ' 个运行中'),
+                    }, instances.filter(function(i){ return i.running; }).length + ' ' + _('running')),
                     E('span', {
                         'data-role': 'run-total',
                         'style':     'font-size:13px;font-weight:normal;color:#aaa;'
-                    }, ' / ' + instances.length + ' 个')
+                    }, ' / ' + instances.length + ' ' + _('total'))
                 ]),
                 E('div', { 'style':'display:flex;gap:6px;' }, [
                     E('button', {
                         'class': 'btn cbi-button-action',
                         'style': 'padding:3px 10px;font-size:12px;',
                         'click': function() { self._doBatchAction('start'); }
-                    }, '全部启动'),
+                    }, _('Start All')),
                     E('button', {
                         'class': 'btn cbi-button-action',
                         'style': 'padding:3px 10px;font-size:12px;',
                         'click': function() { self._doBatchAction('restart'); }
-                    }, '全部重启'),
+                    }, _('Restart All')),
                     E('button', {
                         'class': 'btn cbi-button',
                         'style': 'padding:3px 10px;font-size:12px;color:#dc3545;border-color:#dc3545;',
                         'click': function() { self._doBatchAction('stop'); }
-                    }, '全部停止'),
+                    }, _('Stop All')),
                 ])
             ]),
             self._renderInstanceTable(instances)
         ]),
             E('div', { 'class':'cbi-section' }, [
-                E('h3', {}, '节点信息'),
+                E('h3', {}, _('Node Info')),
                 self._renderCtrlPanel(instances)
             ]),
             E('div', {
@@ -209,15 +209,15 @@ return view.extend({
         });
         if (!missing.length) return E('span', {});
         return E('div', { 'class':'alert-message warning', 'style':'margin-bottom:16px;' }, [
-            E('strong', {}, '⚠ 程序文件缺失：'),
+            E('strong', {}, _('⚠ Binary files missing: ')),
             E('span',   {}, ' ' + missing.join(', ')),
             E('br'),
-            E('span',   {}, '请前往 '),
+            E('span',   {}, _('Please go to ')),
             E('a', {
                 'href':  L.url('admin/vpn/vnt2/settings'),
                 'style': 'text-decoration:underline;color:#0069d9;'
-            }, '设置与更新'),
-            E('span', {}, ' 页面下载安装。')
+            }, _('Settings & Update')),
+            E('span', {}, _(' page to download and install.'))
         ]);
     },
 
@@ -225,9 +225,9 @@ return view.extend({
         var self = this;
         if (!instances.length)
             return E('p', { 'style':'color:#888;' },
-                '暂无实例，请先在客户端或服务端配置页新建实例。');
+                _('No instances yet. Please create one in client or server config page first.'));
         var thStyle = 'padding:8px 12px;text-align:center;';
-        var heads   = ['实例名称','实例类型','运行时间','PID','CPU／RAM','快捷操作','Web UI'];
+        var heads   = [_('Instance Name'),_('Type'),_('Uptime'),'PID',_('CPU/RAM'),_('Quick Actions'),'Web UI'];
         return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;' },
             E('table', {
                 'class': 'vnt2-table',
@@ -254,7 +254,7 @@ return view.extend({
             + runningColor(running) + ';';
         return E('tr', { 'id':'vnt2-row-' + inst.name }, [
             E('td', { 'class':'vnt2-col-name', 'style':tdStyle }, inst.name),
-            E('td', { 'style':tdStyle }, inst.type === 'vnt' ? '客户端' : '服务端'),
+            E('td', { 'style':tdStyle }, inst.type === 'vnt' ? _('Client') : _('Server')),
             E('td', { 'id':'vnt2-uptime-'  + inst.name, 'style':tdStyle },
                 running ? formatUptime(inst.uptime) : '-'),
             E('td', { 'id':'vnt2-pid-'     + inst.name, 'style':tdStyle }, inst.pid || '-'),
@@ -292,7 +292,7 @@ return view.extend({
                 'href':   window.location.protocol + '//' + window.location.hostname + ':' + port,
                 'target': '_blank',
                 'style':  'font-size:18px;text-decoration:none;',
-                'title':  '进入 Web 管理'
+                'title':  _('Enter Web Admin')
             }, '🌐 ');
         }
         return E('span', { 'style':'color:#ccc;' }, '-');
@@ -305,13 +305,13 @@ return view.extend({
                 ? result && (result.result === 'ok' || result.result === 'not_running')
                 : result && result.result === 'ok';
             self._ui.notify(
-                '实例 "' + name + '" ' + act.label +
-                (ok ? ' 成功' : ' 失败：' + ((result && result.msg) || '未知错误')),
+                _('Instance "') + name + '" ' + act.label +
+                (ok ? _(' success') : _(' failed: ') + ((result && result.msg) || _('Unknown error'))),
                 ok ? 'success' : 'error'
             );
             refreshList(self);
         }).catch(function(err) {
-            self._ui.notify('操作失败：' + String(err), 'error');
+            self._ui.notify(_('Operation failed: ') + String(err), 'error');
         });
     },
 
@@ -323,14 +323,14 @@ return view.extend({
         callInstanceAction(null, actId).then(function(r) {
             var results = (r && Array.isArray(r.results)) ? r.results : [];
             if (!results.length && r && r.result === 'ok') {
-                self._ui.notify('全部 ' + act.label + ' 指令已发送', 'success');
+                self._ui.notify(_('All ') + act.label + _(' commands sent'), 'success');
                 refreshList(self);
                 return;
             }
 
             if (!results.length) {
                 self._ui.notify(
-                    '没有' + (act.needRunning ? '运行中' : '已停止') + '的实例可供' + act.label,
+                    _('No ') + (act.needRunning ? _('running') : _('stopped')) + _(' instances available for ') + act.label,
                     'error'
                 );
                 return;
@@ -339,15 +339,15 @@ return view.extend({
             var failed = results.filter(function(item) { return item.result !== 'ok'; });
             self._ui.notify(
                 failed.length
-                    ? act.label + ' 部分失败：' + failed.map(function(item) {
-                        return '"' + item.name + '"' + (item.msg ? '：' + item.msg : '');
-                    }).join('、')
-                    : '全部 ' + act.label + ' 成功（共 ' + results.length + ' 个）',
+                    ? act.label + _(' partially failed: ') + failed.map(function(item) {
+                        return '"' + item.name + '"' + (item.msg ? ': ' + item.msg : '');
+                    }).join(', ')
+                    : _('All ') + act.label + _(' success (total ') + results.length + ')',
                 failed.length ? 'error' : 'success'
             );
             refreshList(self);
         }).catch(function(err) {
-            self._ui.notify('批量' + act.label + '失败：' + String(err), 'error');
+            self._ui.notify(_('Batch ') + act.label + _(' failed: ') + String(err), 'error');
         });
     },
 
@@ -372,7 +372,7 @@ return view.extend({
                 wrap.appendChild(E('p', {
                     'id':    'vnt2-no-inst-tip',
                     'style': 'color:#888;'
-                }, '暂无运行中的客户端实例。'));
+                }, _('No running client instances.')));
                 self._selectedInstance = null;
             }
             return;
@@ -456,12 +456,12 @@ return view.extend({
                 'id':    'vnt2-ctrl-tab-' + t.id,
                 'style': 'display:' + (t.id === self._activeCtrlTab ? 'block' : 'none')
                        + ';padding:12px 0;'
-            }, E('p', { 'style':'color:#888;font-style:italic;' }, '加载中...'));
+            }, E('p', { 'style':'color:#888;font-style:italic;' }, _('Loading...')));
         }));
 
         return E('div', {}, [
             E('div', { 'style':'display:flex;align-items:center;gap:8px;' }, [
-                E('label', {}, '选择实例：'),
+                E('label', {}, _('Select instance: ')),
                 instSelect,
                 E('button', {
                     'class': 'btn cbi-button-action',
@@ -469,7 +469,7 @@ return view.extend({
                         if (self._selectedInstance)
                             self._loadCtrlTab(self._selectedInstance, self._activeCtrlTab);
                     }
-                }, '刷新')
+                }, _('Refresh'))
             ]),
             tabHeader,
             tabBody
@@ -500,8 +500,8 @@ return view.extend({
         callGetCtrlInfo(name, cmd).then(function(r) {
             el.innerHTML = '';
             var output = ((r && r.output) || '').replace(/\x1b\[[0-9;]*m/g, '');
-            if (!output || output === '非客户端实例' || output === '控制端口已禁用') {
-                el.appendChild(E('p', { 'style':'color:#888;' }, output || '暂无数据'));
+            if (!output || output === _('Non-client instance') || output === _('Control port disabled')) {
+                el.appendChild(E('p', { 'style':'color:#888;' }, output || _('No data')));
                 return;
             }
             el.appendChild(E('pre', {
@@ -513,7 +513,7 @@ return view.extend({
                 ].join(';')
             }, output));
         }).catch(function() {
-            el.innerHTML = '<p style="color:#e00;">加载失败</p>';
+            el.innerHTML = '<p style="color:#e00;">' + _('Loading failed') + '</p>';
         });
     },
 
@@ -558,8 +558,8 @@ return view.extend({
         var runCount = instances.filter(function(i) { return i.running; }).length;
         var statusEl = document.querySelector('[data-role="run-status"]');
         var totalEl  = document.querySelector('[data-role="run-total"]');
-        if (statusEl) statusEl.textContent = runCount + ' 个运行中';
-        if (totalEl)  totalEl.textContent  = ' / ' + instances.length + ' 个';
+        if (statusEl) statusEl.textContent = runCount + ' ' + _('running');
+        if (totalEl)  totalEl.textContent  = ' / ' + instances.length + ' ' + _('total');
         var wrap = document.getElementById('vnt2-ctrl-panel-wrap');
         if (wrap) {
             self._syncCtrlPanelDom(
