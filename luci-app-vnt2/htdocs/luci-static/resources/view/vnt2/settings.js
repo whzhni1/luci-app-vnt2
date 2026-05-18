@@ -17,6 +17,7 @@ var callDoUpdate           = rpcDeclare('do_update',            ['project', 'tag
 var callSaveSettings       = rpcDeclare('save_settings', [
     'bin_path','config_path','arch','mirror',
     'auto_update','update_interval','upx_compressed',
+    'respawn_threshold','respawn_timeout','respawn_retry',
     'fw_vnt_to_lan','fw_lan_to_vnt',
     'fw_vnt_to_wan','fw_wan_to_vnt',
     'fw_vnt_web','fw_vnts_web'
@@ -72,26 +73,30 @@ return view.extend({
 
     _getUciSettings: function() {
         var g = function(k) { return uci.get('vnt2', 'global', k); };
+        var boolStr = function(v) { return v === '1' ? '1' : '0'; };
         return [
             g('bin_path')                  || '/usr/bin',
             g('config_path')               || '/etc/vnt2_config',
-            g('arch')                      || '',
+            g('arch')                      || '0',
             g('mirror')                    || 'github',
-            g('auto_update')               === '1',
+            boolStr(g('auto_update')),
             parseInt(g('update_interval')) || 7,
-            g('upx_compressed')            === '1',
-            g('fw_vnt_to_lan')             === '1',
-            g('fw_lan_to_vnt')             === '1',
-            g('fw_vnt_to_wan')             === '1',
-            g('fw_wan_to_vnt')             === '1',
-            g('fw_vnt_web')                === '1',
-            g('fw_vnts_web')               === '1',
+            boolStr(g('upx_compressed')),
+            parseInt(g('respawn_threshold')) || 3600,
+            parseInt(g('respawn_timeout'))   || 5,
+            parseInt(g('respawn_retry'))     || 5,
+            boolStr(g('fw_vnt_to_lan')),
+            boolStr(g('fw_lan_to_vnt')),
+            boolStr(g('fw_vnt_to_wan')),
+            boolStr(g('fw_wan_to_vnt')),
+            boolStr(g('fw_vnt_web')),
+            boolStr(g('fw_vnts_web')),
         ];
     },
 
     handleSave: function() {
         var self = this;
-        return callSaveSettings.apply(null, args);
+        return callSaveSettings.apply(null, this._getUciSettings());
     },
 
     handleSaveApply: function() {
@@ -215,6 +220,52 @@ return view.extend({
                     ]), '可显著减小程序文件体积')
             ]),
             E('div', { 'class': 'cbi-section' }, [
+                E('h3', {}, '进程守护（Respawn）'),
+                    ...(function() {
+                        var defThreshold = g('respawn_threshold') || '3600';
+                        var defTimeout   = g('respawn_timeout')   || '5';
+                        var defRetry     = g('respawn_retry')      || '5';
+
+                        var descThreshold = E('span', {}, '在 ' + defThreshold + ' 秒内统计崩溃次数，0 不统计');
+                        var descTimeout   = E('span', {}, '异常退出后等待 ' + defTimeout + ' 秒重启');
+                        var descRetry     = E('span', {}, '最多重启 ' + defRetry + ' 次后不再重启，0 不限制');
+
+                        var inpThreshold = E('input', { 'type': 'number', 'class': 'cbi-input-text',
+                            'id': 's-respawn-threshold',
+                            'value': defThreshold, 'min': '0', 'style': 'width:100px;',
+                            'change': function() {
+                                var v = this.value || '3600';
+                                uci.set('vnt2', 'global', 'respawn_threshold', v);
+                                descThreshold.textContent = '在 ' + v + ' 秒内统计崩溃次数，0 不统计';
+                            }
+                        });
+                        var inpTimeout = E('input', { 'type': 'number', 'class': 'cbi-input-text',
+                            'id': 's-respawn-timeout',
+                            'value': defTimeout, 'min': '0', 'style': 'width:100px;',
+                            'change': function() {
+                                var v = this.value || '5';
+                                uci.set('vnt2', 'global', 'respawn_timeout', v);
+                                descTimeout.textContent = '异常退出后等待 ' + v + ' 秒重启';
+                            }
+                        });
+                        var inpRetry = E('input', { 'type': 'number', 'class': 'cbi-input-text',
+                            'id': 's-respawn-retry',
+                            'value': defRetry, 'min': '0', 'style': 'width:100px;',
+                            'change': function() {
+                                var v = this.value || '5';
+                                uci.set('vnt2', 'global', 'respawn_retry', v);
+                                descRetry.textContent = '最多重启 ' + v + ' 次后不再重启，0 不限制';
+                            }
+                        });
+
+                        return [
+                            vui.buildFormRow('失败阀值（秒）', inpThreshold, descThreshold),
+                            vui.buildFormRow('重启延迟（秒）', inpTimeout,   descTimeout),
+                            vui.buildFormRow('重启次数',   inpRetry,     descRetry),
+                        ];
+                    })()
+                ]),
+            E('div', { 'class': 'cbi-section' }, [
                 E('h3', {}, '防火墙转发'),
                 E('div', {}, FW_OPTIONS.map(buildCheckRow))
             ])
@@ -247,17 +298,7 @@ return view.extend({
                             E('td', { 'style': tdStyle }, sys.luci_version || '未知'),
                             E('td', { 'style': tdStyle + 'color:#28a745;font-weight:bold;' }, '✓ 已安装')
                         ])
-                    ].concat(COMPONENTS.map(function(comp) {
-                        var installed = !!bins[comp.binKey];
-                        return E('tr', {}, [
-                            E('td', { 'style': tdStyle }, comp.name),
-                            E('td', { 'style': tdStyle },
-                                installed ? (sys[comp.versionKey] || '未知') : '未安装'),
-                            E('td', { 'style': tdStyle + 'color:' +
-                                (installed ? '#28a745' : '#dc3545') + ';font-weight:bold;' },
-                                installed ? '✓ 已安装' : '✗ 未安装')
-                        ]);
-                    })))
+                    ].concat(self._buildVersionRows(sys, bins)))
                 ])
             ),
             E('h3', {}, '检查更新'),
@@ -267,6 +308,36 @@ return view.extend({
             E('div', { 'style': 'margin:12px 0;border-top:1px solid #eee;' }),
             self._buildUpdateBlock('vnts', 'VNTS 服务端（vnts2）')
         ]);
+    },
+
+    _buildVersionRows: function(sys, bins) {
+        var tdStyle = 'padding:8px 12px;text-align:center;vertical-    align:middle;';
+        return COMPONENTS.map(function(comp) {
+            var installed = !!bins[comp.binKey];
+            return E('tr', { 'data-comp': comp.name }, [
+                E('td', { 'style': tdStyle }, comp.name),
+                E('td', { 'style': tdStyle },
+                    installed ? (sys[comp.versionKey] || '未知') : '未安装'),
+                E('td', { 'style': tdStyle + 'color:' +
+                    (installed ? '#28a745' : '#dc3545') + ';font-weight:bold;' },
+                    installed ? '✓ 已安装' : '✗ 未安装')
+            ]);
+        });
+    },
+
+    _refreshVersionTable: function() {
+        var self = this;
+        Promise.all([callGetSystemInfo(), callCheckBinaries()]).then(function(res) {
+            self._sysinfo  = res[0] || {};
+            self._binaries = res[1] || {};
+            var tbody = document.querySelector('[data-comp]');
+            if (!tbody) return;
+            tbody = tbody.parentNode;
+            var newRows = self._buildVersionRows(self._sysinfo, self._binaries);
+            var old = tbody.querySelectorAll('[data-comp]');
+            old.forEach(function(el) { el.parentNode.removeChild(el); });
+            newRows.forEach(function(row) { tbody.appendChild(row); });
+        });
     },
 
     _buildUpdateBlock: function(project, title) {
@@ -459,6 +530,7 @@ return view.extend({
                     if (btn) btn.disabled = false;
                     self._setStatus(bid, '✓ 安装完成：' + (s.installed || ''), '#28a745');
                     if (s.log) self._showLog(bid, s.log);
+                    self._refreshVersionTable();
                     return;
                 }
                 if (s.status === 'error') {

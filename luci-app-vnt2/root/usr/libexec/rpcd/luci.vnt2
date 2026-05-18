@@ -22,11 +22,14 @@ const START_METHODS = {
 const SETTING_DEFS = [
     ["bin_path",        "/usr/bin"        ],
     ["config_path",     "/etc/vnt2_config"],
-    ["arch",            ""                ],
+    ["arch",            "0"                ],
     ["mirror",          "github"          ],
     ["auto_update",     "0"               ],
     ["update_interval", "7"               ],
     ["upx_compressed",  "0"               ],
+    ["respawn_threshold",  "3600"],
+    ["respawn_timeout",    "5"   ],
+    ["respawn_retry",      "5"   ],
     ["fw_vnt_to_lan",   "1"               ],
     ["fw_lan_to_vnt",   "1"               ],
     ["fw_vnt_to_wan",   "0"               ],
@@ -255,6 +258,20 @@ function cmdGetLog(args) {
     initPaths();
     let name    = args.name;
     let lines   = args.lines != null ? int(args.lines) : null;
+    if (name === 'update_all') {
+        let files = ['luci-app-vnt2', 'vnt', 'vnts'];
+        let parts = [];
+        for (let i = 0; i < length(files); i++) {
+            let p = `${DEFAULTS.update_dir}/${files[i]}.log`;
+            let fp = open(p, 'r');
+            if (fp) {
+                let c = trim(fp.read('all'));
+                fp.close();
+                if (c) push(parts, c);
+            }
+        }
+        return { content: join('\n', parts) };
+    }
     let logFile = `${CFG.log_dir}/${name}.log`;
     if (!fileExists(logFile)) return { content: "" };
     let cmd = (lines != null && lines > 0)
@@ -265,6 +282,10 @@ function cmdGetLog(args) {
 
 function cmdClearLog(args) {
     initPaths();
+    if (args.name === 'update_all') {
+        execOutput(`rm -rf '${DEFAULTS.update_dir}' 2>/dev/null`);
+        return { result: 'ok' };
+    }
     let logFile = `${CFG.log_dir}/${args.name}.log`;
     if (fileExists(logFile)) {
         let f = open(logFile, "w");
@@ -585,6 +606,11 @@ function fmtWebRoute(peers) {
     return hasAny ? join("\n", lines) : "暂无路由信息";
 }
 
+function wrap(api, fmt) {
+    let r = fetchWebApi(webAddr, api);
+    return (r && r.code === 0) ? fmt(r.data) : "获取失败";
+}
+
 function cmdGetCtrlInfo(args) {
     initPaths();
     let name = args.name;
@@ -593,27 +619,14 @@ function cmdGetCtrlInfo(args) {
     if (type !== "vnt") return { output: "非客户端实例" };
     let conf   = confFile(name, "vnt");
     let method = getStartMethod(name, "vnt");
-
     if (method === "vnt2_web") {
         let webAddr = readField(conf, "web_addr");
         if (!webAddr) return { output: "未配置 web_addr" };
         let CMD_MAP = {
-            info:    function() {
-                let r = fetchWebApi(webAddr, "/api/info");
-                return (r && r.code === 0) ? fmtWebInfo(r.data) : "获取失败";
-            },
-            ips:     function() {
-                let r = fetchWebApi(webAddr, "/api/info");
-                return (r && r.code === 0) ? fmtWebIps(r.data) : "获取失败";
-            },
-            clients: function() {
-                let r = fetchWebApi(webAddr, "/api/peers");
-                return (r && r.code === 0) ? fmtWebClients(r.data) : "获取失败";
-            },
-            route:   function() {
-                let r = fetchWebApi(webAddr, "/api/peers");
-                return (r && r.code === 0) ? fmtWebRoute(r.data) : "获取失败";
-            },
+            info:    () => wrap("/api/info",  fmtWebInfo),
+            ips:     () => wrap("/api/info",  fmtWebIps),
+            clients: () => wrap("/api/peers", fmtWebClients),
+            route:   () => wrap("/api/peers", fmtWebRoute),
         };
         let fn = CMD_MAP[cmd];
         return { output: fn ? fn() : "未知命令: " + cmd };
@@ -666,15 +679,16 @@ function cmdGetSettings() {
 function cmdSaveSettings(args) {
     let uci = cursor();
     uci.load("vnt2");
+    let stringKeys = { bin_path:1, config_path:1, arch:1, mirror:1 };
+    let intKeys    = { update_interval:1, respawn_threshold:1, respawn_timeout:1, respawn_retry:1 };
     for (let i = 0; i < length(SETTING_DEFS); i++) {
         let k = SETTING_DEFS[i][0];
-        if (k === "update_interval") {
-            uci.set("vnt2", "global", k, `${int(args[k]) || 7}`);
-        } else if (k === "bin_path" || k === "config_path" ||
-                   k === "arch"     || k === "mirror") {
+        if (stringKeys[k]) {
             uci.set("vnt2", "global", k, args[k] ?? "");
+        } else if (intKeys[k]) {
+            uci.set("vnt2", "global", k, `${int(args[k]) || int(SETTING_DEFS[i][1])}`);
         } else {
-            uci.set("vnt2", "global", k, args[k] ? "1" : "0");
+            uci.set("vnt2", "global", k, args[k] === "1" ? "1" : "0");
         }
     }
     uci.commit("vnt2");
@@ -853,18 +867,21 @@ const SIGNATURES = {
         config_path:     "String",
         arch:            "String",
         mirror:          "String",
-        auto_update:     "Boolean",
+        auto_update:     "String",
         update_interval: "Integer",
-        upx_compressed:  "Boolean",
-        fw_vnt_to_lan:   "Boolean",
-        fw_lan_to_vnt:   "Boolean",
-        fw_vnt_to_wan:   "Boolean",
-        fw_wan_to_vnt:   "Boolean",
-        fw_vnt_web:      "Boolean",
-        fw_vnts_web:     "Boolean",
+        upx_compressed:  "String",
+        respawn_threshold:    "Integer",
+        respawn_timeout:      "Integer",
+        respawn_retry:   "Integer",
+        fw_vnt_to_lan:   "String",
+        fw_lan_to_vnt:   "String",
+        fw_vnt_to_wan:   "String",
+        fw_wan_to_vnt:   "String",
+        fw_vnt_web:      "String",
+        fw_vnts_web:     "String",
     },
     get_upstream_version: { project: "String", mirror: "String" },
-    do_update:            { project: "String", tag: "String", filename: "String", upx: "Boolean" },
+    do_update:            { project: "String", tag: "String", filename: "String", upx: "String" },
     get_update_status:    { project: "String" },
     get_enabled:          { type: "String" },
     set_enabled:          { type: "String", configs: "String" },

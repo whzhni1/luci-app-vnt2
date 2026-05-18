@@ -19,10 +19,10 @@ var MONTH_MAP = {
 };
 
 var LOG_COLORS = [
-    [/\] 错误 /, '#f04040'],
-    [/\] 警告 /, '#f0c040'],
-    [/\] 系统 /, '#6ab0f5'],
-    [/\] 调试 /, '#888888'],
+    [/\]［错误］/, '#f04040'],
+    [/\]［警告］/, '#f0c040'],
+    [/\]［系统］/, '#6ab0f5'],
+    [/\]［调试］/, '#888888'],
 ];
 
 function getLogEl() {
@@ -129,14 +129,30 @@ return view.extend({
             'change': function(ev) {
                 self._currentInstance = ev.target.value;
                 self._loadLog();
+            },
+            'focus': function() {
+                if (self._instPollHandle) {
+                    window.clearInterval(self._instPollHandle);
+                    self._instPollHandle = null;
+                }
+            },
+            'blur': function() {
+                if (!self._instPollHandle) {
+                    self._instPollHandle = window.setInterval(function() {
+                        self._refreshInstances();
+                    }, 5000);
+                }
             }
-        }, self._instances.length
+        }, (self._instances.length
             ? self._instances.map(function(inst) {
                 var a = { 'value':inst.name };
                 if (inst.name === self._currentInstance) a['selected'] = 'selected';
                 return E('option', a, self._instLabel(inst));
               })
             : [E('option', { 'value':'' }, '暂无实例')]
+        ).concat([
+            E('option', { 'value':'update_all' }, '自动下载与更新'),
+         ])
         );
 
         var linesSelect = E('select', {
@@ -188,7 +204,7 @@ return view.extend({
             var selExists = instances.some(function(i) {
                 return i.name === self._currentInstance;
             });
-            if (!selExists)
+            if (!selExists && self._currentInstance !== 'update_all')
                 self._currentInstance = instances.length ? instances[0].name : null;
 
             self._rebuildSelect(instances);
@@ -219,13 +235,18 @@ return view.extend({
             if (inst.name === self._currentInstance) opt.selected = true;
             sel.appendChild(opt);
         });
+        var opt2         = document.createElement('option');
+        opt2.value       = 'update_all';
+        opt2.textContent = '自动下载与更新';
+        if (self._currentInstance === 'update_all') opt2.selected = true;
+        sel.appendChild(opt2);
     },
 
     _formatLog: function(content) {
         var el = getLogEl();
         if (!el) return;
         el.innerHTML = '';
-
+        var self = this;
         var lines      = content.split('\n');
         var hasContent = false;
 
@@ -234,10 +255,11 @@ return view.extend({
             hasContent = true;
             var timeStr = '';
             var body    = line;
-            var m1 = line.match(
+            var isUpdate = self._currentInstance === 'update_all';
+            var m1 = !isUpdate && line.match(
                 /^(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+\S+\s+\S+\s+(.*)$/
             );
-            var m2 = !m1 && line.match(
+            var m2 = !isUpdate && !m1 && line.match(
                 /^(\w{3}\s+\d+\s+[\d:]+)\s+\S+\s+\S+\s+(.*)$/
             );
 

@@ -14,6 +14,9 @@ CRON_FILE="/etc/crontabs/root"
 FW_ZONE="vnt2_vnt"
 VNT_RUN="/usr/libexec/vnt2-run.sh"
 IFACE_PREFIX="vnt2"
+RESPAWN_THRESHOLD=3600
+RESPAWN_TIMEOUT=5
+RESPAWN_RETRY=5
 
 VNT_PORT_FIELDS="tcp_bind quic_bind ws_bind"
 VNTS_PORT_FIELDS="tcp_bind quic_bind ws_bind server_quic_bind"
@@ -27,8 +30,11 @@ fw_wan_to_vnt|wan|${FW_ZONE}
 
 init_paths() {
     local v
-    v=$(uci -q get vnt2.global.bin_path);    [ -n "$v" ] && BIN_PATH="$v"
-    v=$(uci -q get vnt2.global.config_path); [ -n "$v" ] && CONFIG_PATH="$v"
+    v=$(uci -q get vnt2.global.bin_path);         [ -n "$v" ] && BIN_PATH="$v"
+    v=$(uci -q get vnt2.global.config_path);      [ -n "$v" ] && CONFIG_PATH="$v"
+    v=$(uci -q get vnt2.global.respawn_threshold);[ -n "$v" ] && RESPAWN_THRESHOLD="$v"
+    v=$(uci -q get vnt2.global.respawn_timeout);  [ -n "$v" ] && RESPAWN_TIMEOUT="$v"
+    v=$(uci -q get vnt2.global.respawn_retry);    [ -n "$v" ] && RESPAWN_RETRY="$v"
     mkdir -p "$CONFIG_PATH" "$LOG_DIR"
 }
 
@@ -462,7 +468,7 @@ _do_start_instance() {
     local IFS='|'
     procd_append_param command $bin_args
     unset IFS
-    procd_set_param respawn 3600 5 5
+    procd_set_param respawn "$RESPAWN_THRESHOLD" "$RESPAWN_TIMEOUT" "$RESPAWN_RETRY"
     procd_set_param stdout 0
     procd_set_param stderr 0
     procd_set_param pidfile "/var/run/vnt2_${name}.pid"
