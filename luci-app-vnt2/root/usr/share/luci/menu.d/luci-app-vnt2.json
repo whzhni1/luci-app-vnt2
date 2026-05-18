@@ -8,7 +8,7 @@
     "icon": "wifi"
   },
   "admin/vpn/vnt2/overview": {
-    "title": "概览",
+    "title": "运行状态",
     "order": 10,
     "action": {
       "type": "view",

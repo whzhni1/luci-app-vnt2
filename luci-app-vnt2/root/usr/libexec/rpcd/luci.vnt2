@@ -606,7 +606,7 @@ function fmtWebRoute(peers) {
     return hasAny ? join("\n", lines) : "暂无路由信息";
 }
 
-function wrap(api, fmt) {
+function wrap(webAddr, api, fmt) {
     let r = fetchWebApi(webAddr, api);
     return (r && r.code === 0) ? fmt(r.data) : "获取失败";
 }
@@ -623,10 +623,10 @@ function cmdGetCtrlInfo(args) {
         let webAddr = readField(conf, "web_addr");
         if (!webAddr) return { output: "未配置 web_addr" };
         let CMD_MAP = {
-            info:    () => wrap("/api/info",  fmtWebInfo),
-            ips:     () => wrap("/api/info",  fmtWebIps),
-            clients: () => wrap("/api/peers", fmtWebClients),
-            route:   () => wrap("/api/peers", fmtWebRoute),
+            info:    function() { return wrap(webAddr, "/api/info",  fmtWebInfo);    },
+            ips:     function() { return wrap(webAddr, "/api/info",  fmtWebIps);     },
+            clients: function() { return wrap(webAddr, "/api/peers", fmtWebClients); },
+            route:   function() { return wrap(webAddr, "/api/peers", fmtWebRoute);   },
         };
         let fn = CMD_MAP[cmd];
         return { output: fn ? fn() : "未知命令: " + cmd };
