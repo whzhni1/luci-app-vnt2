@@ -141,7 +141,7 @@ function showEdit() {
 
 function startStatusTimer(self) {
     stopStatusTimer();
-    _statusTimer = window.setInterval(function() { refreshStatus(self); }, 5000);
+    _statusTimer = window.setInterval(function() { refreshStatus(self); }, 3000);
 }
 
 function stopStatusTimer() {

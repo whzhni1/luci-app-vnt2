@@ -37,7 +37,7 @@ var LINKS = [
 var ACTIONS = [
     { id:'start',   label:'启动', needRunning:false },
     { id:'restart', label:'重启', needRunning:true  },
-    { id:'stop',    label:'停止', needRunning:true  },
+    { id:'stop',    label:'停止', needRunning:true, color:'#dc3545' },
 ];
 
 var _lastTicks = {};
@@ -92,6 +92,17 @@ function refreshList(self) {
     });
 }
 
+function buildBatchBtns(self) {
+    return [E('span', { 'style':'font-size:20px;font-weight:bold;line-height:1;display:inline-flex;align-items:center;' }, '全部')]
+        .concat(ACTIONS.map(function(act) {
+            return E('button', {
+                'class': 'btn cbi-button-action',
+                'style': 'padding:3px 10px;font-size:12px;' + (act.color ? 'color:' + act.color + ';border-color:' + act.color + ';' : ''),
+                'click': function() { self._doBatchAction(act.id); }
+            }, act.label);
+        }));
+}
+
 return view.extend({
     load: function() {
         return Promise.all([
@@ -131,7 +142,7 @@ return view.extend({
         });
 
         var node = E('div', { 'class':'cbi-map' }, [
-            E('h2', {}, 'VNT2 概览'),
+            E('h2', {}, 'VNT2 运行状态'),
             self._renderBinaryAlert(binaries),
             E('div', { 'class':'cbi-section' }, [
             E('div', { 'style':'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;' }, [
@@ -146,23 +157,8 @@ return view.extend({
                         'style':     'font-size:13px;font-weight:normal;color:#aaa;'
                     }, ' / ' + instances.length + ' 个')
                 ]),
-                E('div', { 'style':'display:flex;gap:6px;' }, [
-                    E('button', {
-                        'class': 'btn cbi-button-action',
-                        'style': 'padding:3px 10px;font-size:12px;',
-                        'click': function() { self._doBatchAction('start'); }
-                    }, '全部启动'),
-                    E('button', {
-                        'class': 'btn cbi-button-action',
-                        'style': 'padding:3px 10px;font-size:12px;',
-                        'click': function() { self._doBatchAction('restart'); }
-                    }, '全部重启'),
-                    E('button', {
-                        'class': 'btn cbi-button',
-                        'style': 'padding:3px 10px;font-size:12px;color:#dc3545;border-color:#dc3545;',
-                        'click': function() { self._doBatchAction('stop'); }
-                    }, '全部停止'),
-                ])
+                E('div', { 'style':'display:flex;gap:6px;' },
+                        buildBatchBtns(self))
             ]),
             self._renderInstanceTable(instances)
         ]),
@@ -192,7 +188,7 @@ return view.extend({
                 self._refreshRows((r && Array.isArray(r.instances)) ? r.instances : []);
             });
         };
-        poll.add(self._pollFn, 5);
+        poll.add(self._pollFn, 3);
 
         window.setTimeout(function() {
             var el = document.querySelector('.cbi-page-actions');
@@ -276,7 +272,7 @@ return view.extend({
             wrap.appendChild(E('button', {
                 'class':    'btn cbi-button' + (disabled ? '' : '-action'),
                 'disabled': disabled ? 'disabled' : null,
-                'style':    'padding:2px 8px;font-size:12px;',
+                'style': 'padding:2px 8px;font-size:12px;' + (act.color && !disabled ? 'color:' + act.color + ';border-color:' + act.color + ';' : ''),
                 'click':    function() {
                     if (!disabled) self._doAction(act, inst.name);
                 }
