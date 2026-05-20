@@ -693,7 +693,7 @@ function cmdSaveSettings(args) {
     }
     uci.commit("vnt2");
     initPaths();
-    system(`${DEFAULTS.init_script} reload`);
+    system(`setsid ${DEFAULTS.init_script} reload >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 

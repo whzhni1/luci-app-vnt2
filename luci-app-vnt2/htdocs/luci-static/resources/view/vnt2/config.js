@@ -61,7 +61,7 @@ function loadListState(tab) {
     });
 }
 
-function saveListState(self) {
+function saveListState(self, silent) {
     var state    = _listState;
     var promises = Object.keys(TABS).map(function(tab) {
         if (!_listStateLoaded[tab]) return Promise.resolve();
@@ -81,14 +81,8 @@ function saveListState(self) {
             self._ui.notify('部分保存失败', 'error');
             return;
         }
-        self._ui.notify('配置已保存', 'success');
-        return new Promise(function(resolve) {
-            window.setTimeout(function() {
-                refreshStatus(self).then(function() {
-                    resolve();
-                });
-            }, 3000);
-        });
+        if (!silent) self._ui.notify('配置已保存', 'success');
+        return refreshStatus(self);
     }).catch(function(err) {
         self._ui.notify('保存出错：' + String(err), 'error');
     });
@@ -250,6 +244,8 @@ function buildMethodSelect(self, tab, name) {
     sel.addEventListener('change', function() {
         _listState[tab][name].start_method = sel.value;
     });
+    sel.addEventListener('focus', function() { stopStatusTimer(); });
+    sel.addEventListener('blur',  function() { startStatusTimer(self); });
     return sel;
 }
 
@@ -669,7 +665,6 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
 
             var state = _listState[tab][newName] || ensureState(tab, newName);
             if (state.enabled) {
-                self._ui.notify('实例已启用，正在重启...', 'success');
                 callInstanceAction(newName, 'restart').then(function(res) {
                     var ok = res && res.result === 'ok';
                     self._ui.notify(
@@ -689,7 +684,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
                     ensureState(tab, newName);
                     rebuildTable(self);
                     showList();
-                    saveListState(self);
+                    saveListState(self, true);
                 });
         }).catch(function(err) {
             self._ui.notify('保存出错：' + String(err), 'error');
