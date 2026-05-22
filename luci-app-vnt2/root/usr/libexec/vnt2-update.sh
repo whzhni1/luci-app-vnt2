@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.4
+# VNT2 更新脚本 v1.5
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -56,7 +56,10 @@ manage_service() {
     [ -z "$action" ] || [ -z "$name" ] && return
     [ "$name" = "luci-app-vnt2" ] && return
     log "$name" "服务操作: $action $name"
-    /etc/init.d/vnt2 "$action" >/dev/null 2>&1
+    case "$action" in
+        restart|start) setsid /etc/init.d/vnt2 "$action" >/dev/null 2>&1 & ;;
+        *)             /etc/init.d/vnt2 "$action" >/dev/null 2>&1 ;;
+    esac
 }
 
 api_url() {
@@ -102,17 +105,17 @@ load_uci() {
 
 cmd_check() {
     local proj="$1" mirror="${2:-github}"
+    local url raw file_ext lines
+    local slim_json first_release current_tag assets_slim first_asset fname count line
+
     rm -f "$(log_file "$proj")" "$(status_file "$proj")" \
           "$(cache_full "$proj")" "$(cache_slim "$proj")"
 
     set_status "$proj" "checking"
     log "$proj" "检查版本: project=$proj mirror=$mirror"
 
-    local url raw
     url="$(api_url "$mirror" "$proj")"
-    # log "$proj" "API: $url"
-
-    raw="$(pm_install curl -fsSL --connect-timeout 10 --max-time 30 "$url" 2>&1 | sed 's/": /":/g')"
+    raw="$(curl -fsSL --connect-timeout 10 --max-time 30 "$url" 2>&1 | sed 's/": /":/g')"
 
     if [ -z "$raw" ] || ! echo "$raw" | grep -q '"tag_name"'; then
         log "$proj" "API请求失败或无版本"
@@ -120,60 +123,51 @@ cmd_check() {
         return 1
     fi
 
-    local file_ext=""
+    file_ext=""
     [ "$proj" = "luci-app-vnt2" ] && file_ext="$EXT"
 
-    local full_json='{"releases":[' slim_json='{"releases":['
-    local first_release=1
-    local tags_file="$CACHE_DIR/${proj}_tags.tmp"
-    local urls_file="$CACHE_DIR/${proj}_urls.tmp"
+    if [ -n "$file_ext" ]; then
+        lines="$(echo "$raw" | grep -o '"tag_name":"[^"]*"\|https://[^"]*\.'"$file_ext"'[^"]*')"
+    else
+        lines="$(echo "$raw" | grep -o '"tag_name":"[^"]*"\|https://[^"]*linux[^"]*')"
+    fi
 
-    echo "$raw" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 > "$tags_file"
+    slim_json='{"releases":['
+    first_release=1 current_tag="" assets_slim="" first_asset=1
 
-    while IFS= read -r tag; do
-        [ -z "$tag" ] && continue
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        case "$line" in
+            '"tag_name":"'*)
+                if [ -n "$current_tag" ] && [ -n "$assets_slim" ]; then
+                    [ "$first_release" -eq 1 ] && first_release=0 || slim_json="${slim_json},"
+                    slim_json="${slim_json}{\"tag\":\"$current_tag\",\"filenames\":[$assets_slim]}"
+                fi
+                current_tag="$(echo "$line" | cut -d'"' -f4)"
+                assets_slim="" first_asset=1
+                ;;
+            https://*)
+                fname="${line##*/}"
+                [ -z "$fname" ] && continue
+                case "$fname" in *sha256*) continue ;; esac
+                [ "$first_asset" -eq 1 ] && first_asset=0 || assets_slim="${assets_slim},"
+                assets_slim="${assets_slim}\"$fname\""
+                ;;
+        esac
+    done <<EOF
+$lines
+EOF
 
-        if [ -n "$file_ext" ]; then
-            echo "$raw" | grep -o "https://[^\"']*${proj}[^\"']*\\.${file_ext}" > "$urls_file"
-        else
-            echo "$raw" | grep -o "https://[^\"']*${proj}[^\"']*linux[^\"']*" > "$urls_file"
-        fi
+    if [ -n "$current_tag" ] && [ -n "$assets_slim" ]; then
+        [ "$first_release" -eq 1 ] || slim_json="${slim_json},"
+        slim_json="${slim_json}{\"tag\":\"$current_tag\",\"filenames\":[$assets_slim]}"
+    fi
 
-        local assets_full="" assets_slim="" first_asset=1
-
-        while IFS= read -r furl; do
-            [ -z "$furl" ] && continue
-            local fname
-            fname="$(echo "$furl" | grep -o '[^/]*$')"
-            [ -z "$fname" ] && continue
-
-            [ "$first_asset" -eq 1 ] && first_asset=0 \
-                || { assets_full="${assets_full},"; assets_slim="${assets_slim},"; }
-
-            assets_full="${assets_full}{\"name\":\"${fname}\",\"url\":\"${furl}\"}"
-            assets_slim="${assets_slim}\"${fname}\""
-        done < "$urls_file"
-
-        rm -f "$urls_file"
-        [ -z "$assets_full" ] && continue
-
-        [ "$first_release" -eq 1 ] && first_release=0 \
-            || { full_json="${full_json},"; slim_json="${slim_json},"; }
-
-        full_json="${full_json}{\"tag\":\"${tag}\",\"assets\":[${assets_full}]}"
-        slim_json="${slim_json}{\"tag\":\"${tag}\",\"filenames\":[${assets_slim}]}"
-
-    done < "$tags_file"
-    rm -f "$tags_file"
-
-    full_json="${full_json}]}"
     slim_json="${slim_json}]}"
-
-    echo "$full_json" > "$(cache_full "$proj")"
+    echo "$raw"       > "$(cache_full "$proj")"
     echo "$slim_json" > "$(cache_slim "$proj")"
 
-    local count
-    count="$(grep -o '"tag":' "$(cache_full "$proj")" | wc -l | tr -d ' ')"
+    count="$(echo "$slim_json" | grep -o '"tag":' | wc -l | tr -d ' ')"
     log "$proj" "完成，共 $count 个版本"
 
     if [ "$count" -eq 0 ]; then
@@ -182,6 +176,22 @@ cmd_check() {
     fi
 
     set_status "$proj" "ready:$count"
+}
+
+verify_download() {
+    local proj="$1" tmp="$2"
+    local actual
+    actual="$(sha256sum "$tmp" 2>/dev/null | cut -d' ' -f1)"
+    [ -z "$actual" ] && { log "$proj" "sha256sum 不可用，跳过校验"; return 0; }
+    log "$proj" "SHA256: $actual"
+    if grep -q "$actual" "$(cache_full "$proj")" 2>/dev/null; then
+        log "$proj" "SHA256校验通过"
+        return 0
+    else
+        log "$proj" "SHA256校验失败，请重新下载"
+        rm -f "$tmp"
+        return 1
+    fi
 }
 
 cmd_download() {
@@ -229,7 +239,7 @@ cmd_download() {
     local size
     size="$(wc -c < "$tmp" | tr -d ' ')"
     log "$proj" "下载完成: $(format_size "$size")"
-
+    verify_download "$proj" "$tmp" || return 1
     set_status "$proj" "installing"
     log "$proj" "开始安装..."
 
