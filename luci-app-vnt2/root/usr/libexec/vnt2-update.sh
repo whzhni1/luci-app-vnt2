@@ -25,7 +25,7 @@ format_size() {
     local b="$1"
     [ "$b" -gt 1048576 ] && echo "$((b/1048576)) MB" && return
     [ "$b" -gt 1024 ]    && echo "$((b/1024)) KB"    && return
-    echo "$b 字节"
+    echo "$b B"
 }
 
 pm_install() {
@@ -39,7 +39,7 @@ pm_install() {
         esac
 
     elif ! command -v "$pkg" >/dev/null 2>&1; then
-        echo "  [依赖] 安装 $pkg"
+        echo "  [DEP] Installing $pkg"
         $PM update >/dev/null 2>&1
         case "$PM" in
             apk)  apk add "$pkg" >/dev/null 2>&1 || rc=$? ;;
@@ -55,7 +55,7 @@ manage_service() {
     local action="$1" name="$2"
     [ -z "$action" ] || [ -z "$name" ] && return
     [ "$name" = "luci-app-vnt2" ] && return
-    log "$name" "服务操作: $action $name"
+    log "$name" "Service action: $action $name"
     case "$action" in
         restart|start) setsid /etc/init.d/vnt2 "$action" >/dev/null 2>&1 & ;;
         *)             /etc/init.d/vnt2 "$action" >/dev/null 2>&1 ;;
@@ -112,14 +112,14 @@ cmd_check() {
           "$(cache_full "$proj")" "$(cache_slim "$proj")"
 
     set_status "$proj" "checking"
-    log "$proj" "检查版本: project=$proj mirror=$mirror"
+    log "$proj" "Checking version: project=$proj mirror=$mirror"
 
     url="$(api_url "$mirror" "$proj")"
     raw="$(curl -fsSL --connect-timeout 10 --max-time 30 "$url" 2>&1 | sed 's/": /":/g')"
 
     if [ -z "$raw" ] || ! echo "$raw" | grep -q '"tag_name"'; then
-        log "$proj" "API请求失败或无版本"
-        set_status "$proj" "error:API请求失败，请切换镜像源"
+        log "$proj" "API request failed or no version found"
+        set_status "$proj" "error:API request failed, please switch mirror"
         return 1
     fi
 
@@ -168,10 +168,10 @@ EOF
     echo "$slim_json" > "$(cache_slim "$proj")"
 
     count="$(echo "$slim_json" | grep -o '"tag":' | wc -l | tr -d ' ')"
-    log "$proj" "完成，共 $count 个版本"
+    log "$proj" "Done, found $count versions"
 
     if [ "$count" -eq 0 ]; then
-        set_status "$proj" "error:未找到匹配文件，请切换镜像源"
+        set_status "$proj" "error:No matching file found, please switch mirror"
         return 1
     fi
 
@@ -182,13 +182,13 @@ verify_download() {
     local proj="$1" tmp="$2"
     local actual
     actual="$(sha256sum "$tmp" 2>/dev/null | cut -d' ' -f1)"
-    [ -z "$actual" ] && { log "$proj" "sha256sum 不可用，跳过校验"; return 0; }
+    [ -z "$actual" ] && { log "$proj" "sha256sum unavailable, skipping verification"; return 0; }
     log "$proj" "SHA256: $actual"
     if grep -q "$actual" "$(cache_full "$proj")" 2>/dev/null; then
-        log "$proj" "SHA256校验通过"
+        log "$proj" "SHA256 verification passed"
         return 0
     else
-        log "$proj" "SHA256校验失败，请重新下载"
+        log "$proj" "SHA256 verification failed, please re-download"
         rm -f "$tmp"
         return 1
     fi
@@ -201,20 +201,20 @@ cmd_download() {
 
     rm -f "$(log_file "$proj")"
     set_status "$proj" "downloading"
-    log "$proj" "下载: tag=$tag file=$fname upx=$upx"
+    log "$proj" "Downloading: tag=$tag file=$fname upx=$upx"
 
     local cache dl_url
     cache="$(cache_full "$proj")"
     [ ! -f "$cache" ] && {
-        log "$proj" "缓存不存在，请先检查版本"
-        set_status "$proj" "error:请先检查上游版本"
+        log "$proj" "Cache not found, please check version first"
+        set_status "$proj" "error:Please check upstream version first"
         return 1
     }
 
     dl_url="$(grep -o "https://[^\"']*/${fname}" "$cache" | head -1)"
     [ -z "$dl_url" ] && {
-        log "$proj" "未找到下载链接: $fname"
-        set_status "$proj" "error:未找到下载链接，请重新检查版本"
+        log "$proj" "Download URL not found: $fname"
+        set_status "$proj" "error:Download URL not found, please re-check version"
         return 1
     }
 
@@ -230,23 +230,23 @@ cmd_download() {
     local rc=$?
 
     if [ $rc -ne 0 ] || [ ! -s "$tmp" ]; then
-        log "$proj" "下载失败 rc=$rc"
-        set_status "$proj" "error:下载失败(rc=$rc)，请切换镜像源"
+        log "$proj" "Download failed rc=$rc"
+        set_status "$proj" "error:Download failed(rc=$rc), please switch mirror"
         rm -f "$tmp"
         return 1
     fi
 
     local size
     size="$(wc -c < "$tmp" | tr -d ' ')"
-    log "$proj" "下载完成: $(format_size "$size")"
+    log "$proj" "Download complete: $(format_size "$size")"
     verify_download "$proj" "$tmp" || return 1
     set_status "$proj" "installing"
-    log "$proj" "开始安装..."
+   log "$proj" "Starting installation..."
 
     if [ "$proj" = "luci-app-vnt2" ]; then
         pm_install "$tmp" local \
-            && { log "$proj" "安装成功"; set_status "$proj" "done:luci-app-vnt2"; } \
-            || { log "$proj" "安装失败"; set_status "$proj" "error:包安装失败";   }
+            && { log "$proj" "Installation succeeded"; set_status "$proj" "done:luci-app-vnt2"; } \
+            || { log "$proj" "Installation failed"; set_status "$proj" "error:Package installation failed";   }
         rm -f "$tmp"
     else
         _install_bin "$proj" "$tmp" "$upx"
@@ -257,15 +257,15 @@ _do_install() {
     local proj="$1" src="$2" dst="$3" upx="$4"
     chmod 755 "$src"
     if [ "$upx" = "1" ]; then
-        log "$proj" "UPX压缩: $(basename "$dst")"
+        log "$proj" "UPX compressing: $(basename "$dst")"
         pm_install upx --no-color -q -q --force "$src" -o "$dst" >> "$(log_file "$proj")" 2>&1 \
-            && log "$proj" "UPX成功" \
-            || { log "$proj" "UPX失败，直接复制"; cp "$src" "$dst"; }
+            && log "$proj" "UPX succeeded" \
+            || { log "$proj" "UPX failed, copying directly"; cp "$src" "$dst"; }
     else
         cp "$src" "$dst"
     fi
     chmod 755 "$dst"
-    log "$proj" "已安装: $dst"
+    log "$proj" "Installed: $dst"
 }
 
 _install_bin() {
@@ -276,7 +276,7 @@ _install_bin() {
 
     local ftype
     ftype="$(file_type "$tmp")"
-    log "$proj" "文件类型: $ftype"
+    log "$proj" "File type: $ftype"
     manage_service stop "$proj"
     case "$ftype" in
         elf)
@@ -292,8 +292,8 @@ _install_bin() {
             for b in $bins; do
                 local src
                 src="$(find "$extract_dir" -name "$b" -type f 2>/dev/null | head -1)"
-                [ -z "$src" ] && { log "$proj" "未找到: $b"; continue; }
-                [ "$(file_type "$src")" = "elf" ] || { log "$proj" "非ELF跳过: $b"; continue; }
+                [ -z "$src" ] && { log "$proj" "Not found: $b"; continue; }
+                [ "$(file_type "$src")" = "elf" ] || { log "$proj" "Not ELF, skipping: $b"; continue; }
                 _do_install "$proj" "$src" "${bin_path}/${b}" "$upx"
                 installed="${installed:+${installed}, }${b}"
             done
@@ -301,20 +301,20 @@ _install_bin() {
             ;;
         *)
             rm -f "$tmp"
-            log "$proj" "未知文件格式"
-            set_status "$proj" "error:未知文件格式"
+            log "$proj" "Unknown file format"
+            set_status "$proj" "error:Unknown file format"
             return 1
             ;;
     esac
 
     rm -f "$tmp"
     if [ -n "$installed" ]; then
-        log "$proj" "安装完成: $installed"
+        log "$proj" "Installation complete: $installed"
         manage_service restart "$proj"
         set_status "$proj" "done:$installed"
     else
-        log "$proj" "未找到可安装文件"
-        set_status "$proj" "error:未找到可安装文件"
+        log "$proj" "No installable file found"
+        set_status "$proj" "error:No installable file found"
     fi
 }
 
@@ -354,12 +354,12 @@ installed_version() {
 
 auto_update_one() {
     local proj="$1"
-    log "$proj" "=== 自动更新: $proj ==="
+    log "$proj" "=== Auto update: $proj ==="
 
     cmd_check "$proj" "$MIRROR" || return 1
 
     pick_latest "$proj" "$ARCH" || {
-        log "$proj" "无法匹配合适文件"
+        log "$proj" "No matching file found"
         return 1
     }
 
@@ -379,28 +379,28 @@ auto_update_one() {
             ;;
     esac
 
-    log "$proj" "本地: ${cur_ver:-未安装}  上游: ${latest_ver:-未知}"
+    log "$proj" "Local: ${cur_ver:-Not installed}  Upstream: ${latest_ver:-Unknown}"
 
     if [ -n "$cur_ver" ] && [ -n "$latest_ver" ] && [ "$(printf '%s\n' "$cur_ver" "$latest_ver" | sort -V | tail -1)" = "$cur_ver" ]; then
-        log "$proj" "已是最新，跳过"
-        set_status "$proj" "done:已是最新($cur_ver)"
+        log "$proj" "Already up to date, skipping"
+        set_status "$proj" "done:Already up to date($cur_ver)"
         return 0
     fi
 
-    log "$proj" "执行更新: $LATEST_TAG  $LATEST_FILE"
+    log "$proj" "Updating: $LATEST_TAG  $LATEST_FILE"
     cmd_download "$proj" "$LATEST_TAG" "$LATEST_FILE" "$UPX"
 }
 
 cmd_auto_update() {
     load_uci
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始自动更新 mirror=$MIRROR arch=$ARCH"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting auto update mirror=$MIRROR arch=$ARCH"
     local projects="${*:-vnt vnts luci-app-vnt2}"
     for proj in $projects; do
         auto_update_one "$proj" || true
         log "auto" "[$proj] $(cat "$(status_file "$proj")" 2>/dev/null)"
     done
 
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 完成"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done"
 }
 
 case "$1" in

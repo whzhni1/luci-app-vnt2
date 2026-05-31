@@ -38,6 +38,13 @@ const SETTING_DEFS = [
     ["fw_vnts_web",     "0"               ],
 ];
 
+const WEB_API_MAP = {
+    info:    "/api/info",
+    ips:     "/api/info",
+    clients: "/api/peers",
+    route:   "/api/peers",
+};
+
 let CFG = {
     bin_path:    "/usr/bin",
     config_path: "/etc/vnt2_config",
@@ -234,7 +241,7 @@ function instanceAction(name, action) {
     }
     if (name) {
         let type = getType(name);
-        if (!type) return { result: "error", msg: "配置文件不存在" };
+        if (!type) return { result: "error", msg: "Config file not found" };
         let uci = cursor();
         uci.load("vnt2");
         let sid = null;
@@ -316,14 +323,14 @@ function cmdListConfigs(args) {
 function cmdReadConfig(args) {
     initPaths();
     let file = confFile(args.name, args.type);
-    if (!fileExists(file)) return { error: "文件不存在" };
+    if (!fileExists(file)) return { error: "File not found" };
     return { content: safeRead(file) };
 }
 
 function cmdReadTemplate(args) {
     initPaths();
     let tmpl = `${CFG.config_path}/${args.type}.config`;
-    if (!fileExists(tmpl)) return { error: "模板不存在" };
+    if (!fileExists(tmpl)) return { error: "Template not found" };
     return { content: safeRead(tmpl) };
 }
 
@@ -431,7 +438,7 @@ function cmdSaveConfig(args) {
     let type    = args.type;
 
     if (!writeFile(confFile(name, type), args.content))
-        return { result: "error", msg: "写入失败" };
+        return { result: "error", msg: "Write failed" };
 
     if (oldName !== name) {
         let uci = cursor();
@@ -456,7 +463,7 @@ function cmdDeleteConfig(args) {
     initPaths();
     instanceAction(args.name, "stop");
     let file = confFile(args.name, args.type);
-    if (!fileExists(file)) return { result: "error", msg: "文件不存在" };
+    if (!fileExists(file)) return { result: "error", msg: "File not found" };
     unlink(file);
     let uci      = cursor();
     uci.load("vnt2");
@@ -479,136 +486,13 @@ function fetchWebApi(webAddr, path) {
     return raw ? json(raw) : null;
 }
 
-function fmtBytes(b) {
-    if (!b || b <= 0) return '0 B';
-    let units = ['B', 'KB', 'MB', 'GB'];
-    let idx   = 0;
-    let v     = b;
-    while (v >= 1024 && idx < 3) { v /= 1024; idx++; }
-    return sprintf("%.2f %s", v, units[idx]);
-}
 
-function fmtWebInfo(d) {
-    if (!d) return "获取失败";
-    let lines  = [];
-    let fields = [
-        ["名称",     d.name                                                          ],
-        ["虚拟IP",   d.ip ? d.ip + (d.prefix_len ? '/' + d.prefix_len : '') : null  ],
-        ["网关",     d.gateway                                                       ],
-        ["状态",     d.status                                                        ],
-        ["NAT类型",  d.nat_type                                                      ],
-        ["MTU",      d.mtu                                                           ],
-        ["网络代码", d.network_code                                                  ],
-        ["公网IPv4", (d.public_ipv4s && length(d.public_ipv4s))
-                     ? join(', ', d.public_ipv4s) : null                             ],
-        ["公网IPv6", d.public_ipv6                                                   ],
-        ["版本",     d.version                                                       ],
-        ["在线节点", d.online_client_num  || '0'                                     ],
-        ["离线节点", d.offline_client_num || '0'                                     ],
-    ];
-    for (let i = 0; i < length(fields); i++)
-        push(lines, sprintf("%-8s %s", fields[i][0] + ':', fields[i][1] || '-'));
-    let feats = [];
-    if (d.encrypt)  push(feats, '加密');
-    if (d.compress) push(feats, '压缩');
-    if (d.fec)      push(feats, 'FEC');
-    if (d.rtx)      push(feats, 'RTX');
-    push(lines, sprintf("%-8s %s", '功能:', length(feats) ? join(' ', feats) : '无'));
-    if (d.server_info && length(d.server_info)) {
-        push(lines, "\n── 服务器 ──");
-        for (let i = 0; i < length(d.server_info); i++) {
-            let s = d.server_info[i];
-            push(lines, "  " + (s.server || '-')
-                + "  延迟:" + (s.server_rtt != null ? s.server_rtt + 'ms' : '-')
-                + "  " + (s.connected ? '已连接' : '未连接'));
-        }
-    }
-    return join("\n", lines);
-}
-
-function fmtWebIps(d) {
-    if (!d) return "获取失败";
-    return join("\n", [
-        "虚拟IP: " + (d.ip || '-') + (d.prefix_len ? '/' + d.prefix_len : ''),
-        "网关:   " + (d.gateway   || '-'),
-        "设备ID: " + (d.device_id || '-'),
-    ]);
-}
-
-function fmtWebClients(peers) {
-    if (!peers || !length(peers)) return "暂无节点数据";
-    let lines = [];
-    for (let i = 0; i < length(peers); i++) {
-        let p = peers[i];
-        if (i > 0) push(lines, "");
-        let basic = [
-            ["名称", p.name                     ],
-            ["IP",   p.ip                       ],
-            ["状态", p.online ? '在线' : '离线' ],
-            ["版本", p.version                  ],
-        ];
-        for (let j = 0; j < length(basic); j++)
-            push(lines, sprintf("%-6s %s", basic[j][0] + ':', basic[j][1] || '-'));
-        let nat = p.nat_info;
-        if (nat) {
-            push(lines, sprintf("%-6s %s", 'NAT类型:', nat.nat_type || '-'));
-            if (nat.public_ips && length(nat.public_ips))
-                push(lines, sprintf("%-6s %s", '公网IP:', join(', ', nat.public_ips)));
-            if (nat.ipv6)
-                push(lines, sprintf("%-6s %s", 'IPv6:', nat.ipv6));
-        }
-        let pl = p.packet_loss;
-        if (pl) {
-            let rate     = pl.loss_rate != null
-                ? sprintf("%.2f%%", pl.loss_rate * 100) : '-';
-            let plFields = [
-                ["发送",   pl.sent     || 0],
-                ["接收",   pl.received || 0],
-                ["丢包率", rate           ],
-            ];
-            for (let j = 0; j < length(plFields); j++)
-                push(lines, sprintf("%-6s %s", plFields[j][0] + ':', plFields[j][1]));
-        }
-        let tr = p.traffic;
-        if (tr) {
-            let trFields = [
-                ["上传", fmtBytes(tr.tx_bytes)],
-                ["下载", fmtBytes(tr.rx_bytes)],
-            ];
-            for (let j = 0; j < length(trFields); j++)
-                push(lines, sprintf("%-6s %s", trFields[j][0] + ':', trFields[j][1]));
-        }
-    }
-    return join("\n", lines);
-}
-
-function fmtWebRoute(peers) {
-    if (!peers || !length(peers)) return "暂无路由数据";
-    let lines  = [];
-    let hasAny = false;
-    for (let i = 0; i < length(peers); i++) {
-        let p = peers[i];
-        if (!p.route) continue;
-        hasAny = true;
-        if (length(lines) > 0) push(lines, "");
-        push(lines, "节点:  " + (p.name || p.ip || '-'));
-        push(lines, "IP:    " + (p.ip   || '-'));
-        let r = p.route;
-        if (r && type(r) === "object") {
-            push(lines, "地址:  " + (r.addr     || '-'));
-            push(lines, "协议:  " + (r.protocol || '-'));
-            push(lines, "跃点:  " + (r.metric   != null ? r.metric : '-'));
-            push(lines, "延迟:  " + (r.rtt      != null ? r.rtt + 'ms' : '-'));
-        } else {
-            push(lines, "路由:  " + sprintf("%s", r));
-        }
-    }
-    return hasAny ? join("\n", lines) : "暂无路由信息";
-}
-
-function wrap(webAddr, api, fmt) {
+function fetchWebData(webAddr, cmd) {
+    let api = WEB_API_MAP[cmd];
+    if (!api) return { error: "Unknown command", cmd: cmd };
     let r = fetchWebApi(webAddr, api);
-    return (r && r.code === 0) ? fmt(r.data) : "获取失败";
+    if (!r || r.code !== 0) return { error: "Fetch failed" };
+    return { data: r.data };
 }
 
 function cmdGetCtrlInfo(args) {
@@ -616,26 +500,18 @@ function cmdGetCtrlInfo(args) {
     let name = args.name;
     let cmd  = args.cmd;
     let type = getType(name);
-    if (type !== "vnt") return { output: "非客户端实例" };
+    if (type !== "vnt") return { error: "Not a client instance" };
     let conf   = confFile(name, "vnt");
     let method = getStartMethod(name, "vnt");
     if (method === "vnt2_web") {
         let webAddr = readField(conf, "web_addr");
-        if (!webAddr) return { output: "未配置 web_addr" };
-        let CMD_MAP = {
-            info:    function() { return wrap(webAddr, "/api/info",  fmtWebInfo);    },
-            ips:     function() { return wrap(webAddr, "/api/info",  fmtWebIps);     },
-            clients: function() { return wrap(webAddr, "/api/peers", fmtWebClients); },
-            route:   function() { return wrap(webAddr, "/api/peers", fmtWebRoute);   },
-        };
-        let fn = CMD_MAP[cmd];
-        return { output: fn ? fn() : "未知命令: " + cmd };
+        if (!webAddr) return { error: "web_addr not configured" };
+        return fetchWebData(webAddr, cmd);
     }
-
     let port = readField(conf, "ctrl_port") || "11233";
-    if (port === "0") return { output: "控制端口已禁用" };
+    if (port === "0") return { error: "Control port is disabled" };
     let out = execOutput(`${CFG.bin_path}/vnt2_ctrl -p ${port} ${cmd} 2>&1`);
-    return { output: replace(out, /\x1b\[[0-9;]*m/g, "") };
+    return { text: replace(out, /\x1b\[[0-9;]*m/g, "") };
 }
 
 function cmdGetSystemInfo() {
@@ -651,9 +527,9 @@ function cmdGetSystemInfo() {
             `${CFG.bin_path}/${vers[i][1]} --version 2>/dev/null | head -1`
         ));
     r.luci_version =
-        trim(execOutput("apk list 2>/dev/null | grep luci-app-vnt2 | awk '{print $1}' | sed 's/luci-app-vnt2-//'")) ||
-        trim(execOutput("opkg list-installed 2>/dev/null | grep luci-app-vnt2 | awk '{print $3}'")) ||
-        "未知";
+        trim(execOutput("apk list 2>/dev/null | grep '^luci-app-vnt2-' | awk '{print $1}' | sed 's/^luci-app-vnt2-//'")) ||
+        trim(execOutput("opkg list-installed 2>/dev/null | grep '^luci-app-vnt2 ' | awk '{print $3}'")) ||
+        "Unknown";
     return r;
 }
 
@@ -900,7 +776,7 @@ switch (argv[0]) {
         let input  = json(raw) ?? {};
         let fn     = METHODS[method];
         if (!fn) {
-            print(sprintf("%J", { error: "未知方法" }), "\n");
+            print(sprintf("%J", { error: "Unknown method" }), "\n");
         } else {
             try {
                 print(sprintf("%J", fn(input)), "\n");

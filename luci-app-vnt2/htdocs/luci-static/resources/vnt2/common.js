@@ -5,11 +5,43 @@
 var RE_TOML_TABLE = /^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/;
 var NO_COMMENT_FIELDS = ['white_list'];
 
+function detectLang() {
+    var htmlLang = document.documentElement.lang || '';
+    if (htmlLang && htmlLang !== 'auto') return htmlLang.toLowerCase();
+    return (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+}
+
 function escapeStr(s) {
     return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 var VNT2ConfigParser = {
+
+    _extractI18nComment: function(lines) {
+        if (typeof lines === 'string') {
+        lines = lines.split(/\n|(?=\s[a-z]{2}(?:-[a-z]{2,4})?[：:])/i)
+        .map(function(l) { return l.trim(); })
+        .filter(Boolean);
+
+        }
+        var lang    = detectLang();
+        var prefix  = lang.split('-')[0];
+        var langMap = {};
+        var generic = [];
+        var reLang  = /^([a-z]{2}(?:-[a-z]{2,4})?)\s*[：:]\s*/i;
+
+        lines.forEach(function(l) {
+            var m = l.match(reLang);
+            if (m) {
+                var key = m[1].toLowerCase();
+                langMap[key] = (langMap[key] ? langMap[key] + ' ' : '') + l.substring(m[0].length).trim();
+            } else if (!/^\[.*\]$/.test(l) && !/^(?:选项|options?)[：:]/i.test(l)) {
+                generic.push(l);
+            }
+        });
+
+        return langMap[lang] || langMap[prefix] || langMap['en'] || generic.join(' ') || '';
+    },
 
     parseTemplate: function(content) {
         if (!content || typeof content !== 'string') return [];
@@ -29,46 +61,62 @@ var VNT2ConfigParser = {
 
             var tblMatch = line.match(RE_TOML_TABLE);
             if (tblMatch) {
-                var fullCmt = pendingComment.join(' ');
-                var typeM   = fullCmt.match(/\[(\w+)\]/);
-                if (typeM && typeM[1] === 'section') {
-                    fields.push({
-                        name:      tblMatch[1],
-                        type:      'section',
-                        'default': {},
-                        comment:   fullCmt.replace(/\[\w+\]/g, '').replace(/\s+/g, ' ').trim(),
-                        options:   []
-                    });
-                }
-                pendingComment = [];
-                continue;
-            }
+    var typeM = null;
+    for (var ci = 0; ci < pendingComment.length; ci++) {
+        var tm = pendingComment[ci].match(/\[(\w+)\]/);
+        if (tm) { typeM = tm; break; }
+    }
+    if (typeM && typeM[1] === 'section') {
+        fields.push({
+            name:      tblMatch[1],
+            type:      'section',
+            'default': {},
+            comment:   this._extractI18nComment(pendingComment),
+            options:   []
+        });
+    }
+    pendingComment = [];
+    continue;
+}
 
             var eqIdx = line.indexOf('=');
             if (eqIdx < 0) { pendingComment = []; continue; }
 
             var key         = line.substring(0, eqIdx).trim();
             var rawVal      = line.substring(eqIdx + 1).trim();
-            var fullComment = pendingComment.join(' ');
-            var typeMatch   = fullComment.match(/\[(\w+)\]/);
-            var fieldType   = typeMatch ? typeMatch[1] : this._inferType(rawVal);
+            var fieldType = null;
+for (var ci = 0; ci < pendingComment.length; ci++) {
+    var tm2 = pendingComment[ci].match(/\[(\w+)\]/);
+    if (tm2) { fieldType = tm2[1]; break; }
+}
+if (!fieldType) fieldType = this._inferType(rawVal);
 
-            var options  = [];
-            var optMatch = fullComment.match(/选项[：:]\s*([^\n]+)/);
-            if (optMatch) {
-                var optStr = optMatch[1].trim();
-                options = (optStr.indexOf(',') !== -1)
-                    ? optStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean)
-                    : optStr.split(/\s+/).filter(Boolean);
-            }
+var options = [];
+for (var ci = 0; ci < pendingComment.length; ci++) {
+    var optMatch = pendingComment[ci].match(/(?:选项|options?)[：:]\s*(.+)/i);
+    if (optMatch) {
+        var optStr = optMatch[1].trim();
+        options = (optStr.indexOf(',') !== -1)
+            ? optStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean)
+            : optStr.split(/\s+/).filter(Boolean);
+        break;
+    }
+}
 
-            fields.push({
-                name:      key,
-                type:      fieldType,
-                'default': this._parseValue(rawVal, fieldType),
-                comment:   fullComment.replace(/\[\w+\]/g, '').replace(/\s+/g, ' ').trim(),
-                options:   options
-            });
+var exampleStr = '';
+for (var ci = 0; ci < pendingComment.length; ci++) {
+    var em = pendingComment[ci].match(/示例[：:]\s*(\S+)/);
+    if (em) { exampleStr = em[1]; break; }
+}
+
+fields.push({
+    name:      key,
+    type:      fieldType,
+    'default': this._parseValue(rawVal, fieldType),
+    comment:   this._extractI18nComment(pendingComment),
+    example:   exampleStr,
+    options:   options
+});
             pendingComment = [];
         }
         return fields;
@@ -282,11 +330,11 @@ var VNT2UI = {
                     E('button', {
                         'class':'btn', 'style':'margin-right:8px;',
                         'click': function() { L.ui.hideModal(); resolve(false); }
-                    }, '取消'),
+                    }, _('Cancel')),
                     E('button', {
                         'class':'btn cbi-button-action important',
                         'click': function() { L.ui.hideModal(); resolve(true); }
-                    }, '确认')
+                    }, _('Confirm'))
                 ])
             ]);
         });
@@ -294,10 +342,10 @@ var VNT2UI = {
 
     statusBadge: function(running) {
         if (running === undefined || running === null)
-            return E('span', { 'style':'color:#999;font-size:13px;' }, '未启用');
+            return E('span', { 'style':'color:#999;font-size:13px;' }, _('Disabled'));
         return E('span', {
             'style': 'color:' + (running ? '#28a745' : '#dc3545') + ';font-weight:bold;font-size:13px;'
-        }, running ? '✓ 运行中' : '✗ 未运行');
+        }, running ? _('✓ Running') : _('✗ Not running'));
     },
 
     buildFormRow: function(label, inputEl, desc) {

@@ -21,7 +21,7 @@ rotate_log() {
     tmp=$(mktemp) || return
     tail -c $((LOG_MAX / 2)) "$LOG_FILE" > "$tmp" \
         && mv "$tmp" "$LOG_FILE" \
-        && log "日志已自动截断（超过 300KB）"
+        && log "Log truncated (exceeded 300KB)"
 }
 
 format_line() {
@@ -29,10 +29,10 @@ format_line() {
     ts=$(date '+%Y-%m-%d %H:%M:%S')
     printf '%s\n' "$1" \
         | sed "s/^\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)T\([0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\)\.[^[:space:]]* /[${ts}] /" \
-        | sed 's/\] INFO /\]［系统］/g;
-               s/\] WARN /\]［警告］/g;
-               s/\] ERROR /\]［错误］/g;
-               s/\] DEBUG /\]［调试］/g'
+        | sed 's/\] INFO /\]［INFO］/g;
+               s/\] WARN /\]［WARN］/g;
+               s/\] ERROR /\]［ERROR］/g;
+               s/\] DEBUG /\]［DEBUG］/g'
 }
 
 reader_loop() {
@@ -48,10 +48,10 @@ reader_loop() {
 }
 
 rotate_log
-log "启动: $*"
+log "Starting: $*"
 
 FIFO=$(mktemp -u)
-mkfifo "$FIFO" || { log "mkfifo失败"; exit 1; }
+mkfifo "$FIFO" || { log "mkfifo failed"; exit 1; }
 
 reader_loop < "$FIFO" &
 READER_PID=$!
@@ -59,7 +59,7 @@ READER_PID=$!
 exec "$@" > "$FIFO" 2>&1
 EXIT_CODE=$?
 
-log "进程退出 exit=${EXIT_CODE} cmd: $*"
+log "Process exited exit=${EXIT_CODE} cmd: $*"
 wait "$READER_PID" 2>/dev/null
 rm -f "$FIFO"
 exit "$EXIT_CODE"

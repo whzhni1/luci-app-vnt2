@@ -19,10 +19,10 @@ var MONTH_MAP = {
 };
 
 var LOG_COLORS = [
-    [/\]［错误］/, '#f04040'],
-    [/\]［警告］/, '#f0c040'],
-    [/\]［系统］/, '#6ab0f5'],
-    [/\]［调试］/, '#888888'],
+    [/\]［ERROR］/, '#f04040'],
+    [/\]［WARN］/, '#f0c040'],
+    [/\]［INFO］/, '#6ab0f5'],
+    [/\]［DEBUG］/, '#888888'],
 ];
 
 function getLogEl() {
@@ -53,11 +53,13 @@ function getLineColor(line) {
     return '#d4d4d4';
 }
 
-function buildLogLine(timeStr, body) {
+function buildLogLine(timeStr, body, i18n) {
     var span = E('span', { 'style':'display:block;line-height:1.6;' });
     if (timeStr)
         span.appendChild(E('span', { 'style':'color:#6a9153;margin-right:8px;' }, timeStr));
-    span.appendChild(E('span', { 'style':'color:' + getLineColor(body) + ';' }, body));
+    var color       = getLineColor(body);
+    var displayBody = (i18n && i18n.translate) ? i18n.translate(body) : body;
+    span.appendChild(E('span', { 'style':'color:' + color + ';' }, displayBody));
     return span;
 }
 
@@ -69,6 +71,7 @@ return view.extend({
     load: function() {
         return Promise.all([
             L.require('vnt2.common'),
+            L.require('vnt2.i18n-map'),
             callListInstances()
         ]);
     },
@@ -76,13 +79,14 @@ return view.extend({
     render: function(data) {
         var self      = this;
         self._ui      = data[0].VNT2UI;
-        var instances = (data[1] && Array.isArray(data[1].instances))
-            ? data[1].instances : [];
+        self._i18n    = data[1];
+        var instances = (data[2] && Array.isArray(data[2].instances))
+            ? data[2].instances : [];
         self._instances       = instances;
         self._currentInstance = instances.length ? instances[0].name : null;
 
         var node = E('div', { 'class':'cbi-map' }, [
-            E('h2', {}, 'VNT2 日志'),
+            E('h2', {}, _('VNT2 Log')),
             E('div', { 'class':'cbi-section' }, [
                 self._renderToolbar(),
                 E('pre', {
@@ -95,7 +99,7 @@ return view.extend({
                         'white-space:pre-wrap', 'word-break:break-all',
                         'margin-top:12px'
                     ].join(';')
-                }, self._currentInstance ? '加载中...' : '暂无实例')
+                }, self._currentInstance ? _('Loading...') : _('No Instance'))
             ])
         ]);
 
@@ -114,8 +118,8 @@ return view.extend({
     },
 
     _instLabel: function(inst) {
-        var type   = inst.type === 'vnt' ? '客户端' : '服务端';
-        var status = inst.running ? '运行中' : '已停止';
+        var type   = inst.type === 'vnt' ? _('Client') : _('Server');
+        var status = inst.running ? _('Running') : _('Stopped');
         return inst.name + ' (' + type + ' · ' + status + ')';
     },
 
@@ -149,9 +153,9 @@ return view.extend({
                 if (inst.name === self._currentInstance) a['selected'] = 'selected';
                 return E('option', a, self._instLabel(inst));
               })
-            : [E('option', { 'value':'' }, '暂无实例')]
+            : [E('option', { 'value':'' }, _('No Instance'))]
         ).concat([
-            E('option', { 'value':'update_all' }, '自动下载与更新'),
+            E('option', { 'value':'update_all' }, _('Auto Download & Update')),
          ])
         );
 
@@ -163,7 +167,7 @@ return view.extend({
         }, LINE_OPTIONS.map(function(n) {
             var a = { 'value': String(n) };
             if (n === 200) a['selected'] = 'selected';
-            return E('option', a, n === 0 ? '全部' : '最近 ' + n + ' 行');
+            return E('option', a, n === 0 ? _('All') : _('Last %d lines').format(n));
         }));
 
         var autoCheck = E('input', {
@@ -173,10 +177,10 @@ return view.extend({
         });
 
         var btns = [
-            { label:'刷新',     cls:'btn cbi-button-action',  fn: function() { self._loadLog(); }  },
-            { label:'清理日志', cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
-            { label:'滚到顶部', cls:'btn',                     fn: function() { scrollLog(false); } },
-            { label:'滚到底部', cls:'btn',                     fn: function() { scrollLog(true);  } },
+            { label:_('Refresh'),     cls:'btn cbi-button-action',  fn: function() { self._loadLog(); }  },
+            { label:_('Clear Log'), cls:'btn cbi-button-negative', fn: function() { self._clearLog(); } },
+            { label:_('Scroll to Top'), cls:'btn',                     fn: function() { scrollLog(false); } },
+            { label:_('Scroll to Bottom'), cls:'btn',                     fn: function() { scrollLog(true);  } },
         ];
 
         return E('div', {
@@ -186,11 +190,11 @@ return view.extend({
                 'margin-bottom:12px'
             ].join(';')
         }, [
-            E('label', {}, '实例：'),
+            E('label', {}, _('Instance:')),
             instanceSelect,
             linesSelect,
             E('label', { 'style':'cursor:pointer;user-select:none;' },
-                [autoCheck, '自动刷新(5s)']),
+                [autoCheck, _('Auto Refresh (5s)')]),
         ].concat(btns.map(function(b) {
             return E('button', { 'class':b.cls, 'click':b.fn }, b.label);
         })));
@@ -221,10 +225,10 @@ return view.extend({
         if (!instances.length) {
             var opt         = document.createElement('option');
             opt.value       = '';
-            opt.textContent = '暂无实例';
+            opt.textContent = _('No Instance');
             sel.appendChild(opt);
             var el = getLogEl();
-            if (el) el.textContent = '暂无实例';
+            if (el) el.textContent = _('No Instance');;
             return;
         }
 
@@ -237,7 +241,7 @@ return view.extend({
         });
         var opt2         = document.createElement('option');
         opt2.value       = 'update_all';
-        opt2.textContent = '自动下载与更新';
+        opt2.textContent = _('Auto Download & Update');
         if (self._currentInstance === 'update_all') opt2.selected = true;
         sel.appendChild(opt2);
     },
@@ -270,13 +274,13 @@ return view.extend({
                 ''
             );
 
-            el.appendChild(buildLogLine(timeStr, body || line));
+            el.appendChild(buildLogLine(timeStr, body || line, self._i18n));
         });
 
         if (!hasContent)
             el.appendChild(E('span', {
                 'style': 'color:#888;font-style:italic;'
-            }, '（暂无日志）'));
+            }, _('(No logs yet)')));
 
         el.scrollTop = el.scrollHeight;
     },
@@ -288,7 +292,7 @@ return view.extend({
         var lines   = linesEl ? parseInt(linesEl.value) : 200;
         var linesArg = lines === 0 ? null : lines;
         var el = getLogEl();
-        if (el) el.textContent = '加载中...';
+        if (el) el.textContent = _('Loading...');
 
         callGetLog(self._currentInstance, linesArg).then(function(r) {
             var content = (r && r.content) || '';
@@ -298,14 +302,14 @@ return view.extend({
                     el2.innerHTML = '';
                     el2.appendChild(E('span', {
                         'style': 'color:#888;font-style:italic;'
-                    }, '（暂无日志，实例可能尚未启动或未产生输出）'));
+                    }, _('(No logs yet. The instance might not be started or has no output)')));
                 }
                 return;
             }
             self._formatLog(content);
         }).catch(function() {
             var el2 = getLogEl();
-            if (el2) el2.textContent = '加载日志失败';
+            if (el2) el2.textContent = _('Failed to load log');
         });
     },
 

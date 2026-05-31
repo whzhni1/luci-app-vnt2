@@ -425,7 +425,7 @@ _fix_instance_routes() {
             printf '%s' "$lan_cidr" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' || continue
             if ! ip route show dev "$tun_name" | grep -qF "$lan_cidr"; then
                 ip route replace "$lan_cidr" dev "$tun_name" 2>/dev/null && \
-                    _instance_log "$name" "修复路由: ${lan_cidr} dev ${tun_name}"
+                    _instance_log "$name" "Fix route: ${lan_cidr} dev ${tun_name}"
             fi
         done
 }
@@ -446,17 +446,17 @@ _do_start_instance() {
     local bin_args bin log_file
     log_file="${LOG_DIR}/${name}.log"
     [ ! -f "$conf" ] && {
-        _instance_log "$name" "启动失败：配置文件不存在: $conf"
+        _instance_log "$name" "Start failed: config file does not exist: $conf"
         return 1
     }
     bin_args=$(get_bin_args "$name" "$type" "$conf")
     [ -z "$bin_args" ] && {
-        _instance_log "$name" "启动失败：无法构建启动命令"
+        _instance_log "$name" "Start failed: unable to build startup command"
         return 1
     }
     bin=$(printf '%s' "$bin_args" | cut -d'|' -f1)
     [ ! -x "$bin" ] && {
-        _instance_log "$name" "启动失败：二进制不可执行: $bin"
+        _instance_log "$name" "Start failed: binary is not executable: $bin"
         return 1
     }
     if ! is_instance_running "$name"; then
@@ -474,7 +474,7 @@ _do_start_instance() {
     procd_set_param pidfile "/var/run/vnt2_${name}.pid"
     procd_close_instance
 
-    _instance_log "$name" "已注册 type=$type bin=$bin tun=${tun_name:-auto}"
+    _instance_log "$name" "Registered type=$type bin=$bin tun=${tun_name:-auto}"
 }
 
 service_triggers() {
@@ -483,11 +483,11 @@ service_triggers() {
 
 start_service() {
     init_paths
-    echo "VNT2: 启动所有已启用实例..."
+    echo "VNT2: starting all enabled instances..."
     if [ ! -x "${BIN_PATH}/vnt2_cli" ] || [ ! -x "${BIN_PATH}/vnts2" ]; then
         [ -x "$UPDATE_SCRIPT" ] && ! [ -f /tmp/vnt2_downloading ] && {
             touch /tmp/vnt2_downloading
-            echo "开始自动下载vnt2/vnts2..."
+            echo "Starting automatic download of vnt2/vnts2..."
             setsid sh -c "$UPDATE_SCRIPT vnt vnts > /dev/null 2>&1; rm -f /tmp/vnt2_downloading" &
         }
         return 0

@@ -1,0 +1,852 @@
+# VNT2 LuCI i18n Chinese (Simplified)
+# zh-cn
+# v1.0
+
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh-cn\n"
+
+#: luci-app-vnt2.json
+msgid "Instance Status"
+msgstr "运行状态"
+
+msgid "Config Management"
+msgstr "配置管理"
+
+msgid "Logs"
+msgstr "日志"
+
+msgid "Settings & Update"
+msgstr "设置与更新"
+
+#: config.js
+msgid "Client"
+msgstr "客户端"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Configuration"
+msgstr "配置"
+
+msgid "VNT2 Configuration"
+msgstr "VNT2 配置管理"
+
+msgid "No %s configurations yet. Click \"New Config\" to add one."
+msgstr "暂无 %s 配置，点击「新建配置」开始添加。"
+
+msgid "%s Config List"
+msgstr "%s 配置列表"
+
+msgid "New"
+msgstr "新建"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Save Configuration"
+msgstr "保存配置"
+
+msgid "← Back to List"
+msgstr "← 返回列表"
+
+msgid "+ New Config"
+msgstr "+ 新建配置"
+
+msgid "Save & Apply"
+msgstr "保存并应用"
+
+msgid "Enabled"
+msgstr "已启用"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Enable auto update"
+msgstr "启用自动更新"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Start Method"
+msgstr "启动方式"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Configuration Name:"
+msgstr "配置名称："
+
+msgid "Letters, numbers, underscores, hyphens"
+msgstr "字母、数字、下划线、连字符"
+
+msgid "Name can only contain letters, numbers, underscores, hyphens"
+msgstr "名称只能包含字母、数字、下划线、连字符"
+
+msgid "Configuration name already exists"
+msgstr "配置名称已存在"
+
+msgid "— Please select —"
+msgstr "— 请选择 —"
+
+msgid "Loading configuration..."
+msgstr "正在加载配置..."
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "Load failed: %s"
+msgstr "加载失败：%s"
+
+msgid "Template fields are empty, please check the template file."
+msgstr "模板字段为空，请检查模板文件。"
+
+msgid "The following required fields are not filled: %s"
+msgstr "以下必填字段未填写：%s"
+
+msgid "Save failed: %s"
+msgstr "保存失败：%s"
+
+msgid "Save error: %s"
+msgstr "保存出错：%s"
+
+msgid "Restart error: %s"
+msgstr "重启出错：%s"
+
+msgid "Instance \"%s\" restarted successfully"
+msgstr "实例 \"%s\" 重启成功"
+
+msgid "Are you sure to delete config \"%s\"?"
+msgstr "确定要删除配置 \"%s\" 吗？"
+
+msgid "Instance \"%s\" is running and will be stopped on delete. Are you sure?"
+msgstr "实例 \"%s\" 正在运行，删除后将自动停止，确定吗？"
+
+msgid "Config \"%s\" has been deleted"
+msgstr "配置 \"%s\" 已删除"
+
+msgid "Delete failed: %s"
+msgstr "删除失败：%s"
+
+msgid "Confirm Delete"
+msgstr "确认删除"
+
+msgid "Discard Changes"
+msgstr "放弃更改"
+
+msgid "Unsaved changes will be lost when switching tabs. Are you sure?"
+msgstr "切换标签页将丢失未保存的更改，确定吗？"
+
+msgid "Unsaved changes exist. Are you sure to discard and return?"
+msgstr "存在未保存的更改，确定放弃并返回吗？"
+
+msgid "Partial save failed"
+msgstr "部分保存失败"
+
+msgid "Configuration saved"
+msgstr "配置已保存"
+
+msgid "Add a row"
+msgstr "添加一行"
+
+msgid "Delete this row"
+msgstr "删除此行"
+
+msgid "Unknown error"
+msgstr "未知错误"
+
+#: overview.js
+msgid "VNT2 Status"
+msgstr "VNT2 运行状态"
+
+msgid "Instance Status "
+msgstr "实例运行状态 "
+
+msgid "%d running"
+msgstr "%d 个运行中"
+
+msgid "/ %d total"
+msgstr "/ 共 %d 个"
+
+msgid "Instance Name"
+msgstr "实例名称"
+
+msgid "Type"
+msgstr "类型"
+
+msgid "Uptime"
+msgstr "运行时长"
+
+msgid "d"
+msgstr "天"
+
+msgid "h"
+msgstr "时"
+
+msgid "m"
+msgstr "分"
+
+msgid "s"
+msgstr "秒"
+
+msgid "No instances, please create one on the Client or Server configuration page first."
+msgstr "暂无实例，请先在客户端或服务端配置页面创建配置。"
+
+msgid "All"
+msgstr "全部"
+
+msgid "Start"
+msgstr "启动"
+
+msgid "Restart"
+msgstr "重启"
+
+msgid "Stop"
+msgstr "停止"
+
+msgid "Enter Web UI"
+msgstr "进入 Web 界面"
+
+msgid "Instance \"%s\" %s succeeded"
+msgstr "实例 \"%s\" %s 成功"
+
+msgid "Instance \"%s\" %s failed: %s"
+msgstr "实例 \"%s\" %s 失败：%s"
+
+msgid "Action failed:"
+msgstr "操作失败："
+
+msgid "All %s commands sent"
+msgstr "全部 %s 指令已发送"
+
+msgid "No %s instances available for %s"
+msgstr "没有可供 %s 操作的 %s 实例"
+
+msgid "running"
+msgstr "运行中"
+
+msgid "stopped"
+msgstr "已停止"
+
+msgid "%s partially failed: %s"
+msgstr "%s 部分失败：%s"
+
+msgid "All %s succeeded (%d total)"
+msgstr "全部 %s 成功（共 %d 个）"
+
+msgid "Batch %s failed: %s"
+msgstr "批量 %s 失败：%s"
+
+msgid "Missing binary files:"
+msgstr "缺少二进制文件: "
+
+msgid "Please go to"
+msgstr "请前往"
+
+msgid "Settings and Update"
+msgstr "设置与更新"
+
+msgid "page to download and install."
+msgstr "页面下载安装。"
+
+msgid "Node Information"
+msgstr "节点信息"
+
+msgid "No running client instances."
+msgstr "暂无运行中的客户端实例。"
+
+msgid "Select Instance:"
+msgstr "选择实例："
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Basic Info"
+msgstr "基本信息"
+
+msgid "IP List"
+msgstr "IP 列表"
+
+msgid "Route"
+msgstr "路由"
+
+msgid "Load failed"
+msgstr "加载失败"
+
+msgid "No data available"
+msgstr "暂无数据"
+
+msgid "Not a client instance"
+msgstr "非客户端实例"
+
+msgid "Control port is disabled"
+msgstr "控制端口已禁用"
+
+msgid "web_addr not configured"
+msgstr "未配置 web_addr"
+
+msgid "Fetch failed"
+msgstr "获取失败"
+
+msgid "No peer data available"
+msgstr "暂无节点数据"
+
+msgid "No route data available"
+msgstr "暂无路由数据"
+
+msgid "No route info available"
+msgstr "暂无路由信息"
+
+msgid "Virtual IP"
+msgstr "虚拟 IP"
+
+msgid "Gateway"
+msgstr "网关"
+
+msgid "NAT Type"
+msgstr "NAT 类型"
+
+msgid "MTU"
+msgstr "MTU"
+
+msgid "Network Code"
+msgstr "网络代码"
+
+msgid "Public IPv4"
+msgstr "公网 IPv4"
+
+msgid "Public IPv6"
+msgstr "公网 IPv6"
+
+msgid "Version"
+msgstr "版本"
+
+msgid "Online"
+msgstr "在线"
+
+msgid "Offline"
+msgstr "离线"
+
+msgid "Features"
+msgstr "功能特性"
+
+msgid "Encrypt"
+msgstr "加密"
+
+msgid "Compress"
+msgstr "压缩"
+
+msgid "── Servers ──"
+msgstr "── 服务器 ──"
+
+msgid "Connected"
+msgstr "已连接"
+
+msgid "Disconnected"
+msgstr "未连接"
+
+msgid "Device ID"
+msgstr "设备 ID"
+
+msgid "IP"
+msgstr "IP"
+
+msgid "Public IP"
+msgstr "公网 IP"
+
+msgid "Sent"
+msgstr "已发送"
+
+msgid "Received"
+msgstr "已接收"
+
+msgid "Loss Rate"
+msgstr "丢包率"
+
+msgid "Upload"
+msgstr "上传"
+
+msgid "Download"
+msgstr "下载"
+
+msgid "Node"
+msgstr "节点"
+
+msgid "Address"
+msgstr "地址"
+
+msgid "Protocol"
+msgstr "协议"
+
+msgid "Metric"
+msgstr "跃点"
+
+msgid "RTT"
+msgstr "延迟"
+
+msgid "Simple and efficient networking tool"
+msgstr "简便高效的异地组网工具"
+
+msgid "Official Website"
+msgstr "官网"
+
+#: settings.js
+msgid "VNT2 Settings & Update"
+msgstr "VNT2 设置与更新"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Basic Settings"
+msgstr "基础设置"
+
+msgid "Binary Path"
+msgstr "二进制文件路径"
+
+msgid "Directory of binary files, default /usr/bin"
+msgstr "二进制文件所在目录，默认 /usr/bin"
+
+msgid "Configuration Path"
+msgstr "配置文件路径"
+
+msgid "Directory of configuration files, default /etc/vnt2_config"
+msgstr "配置文件所在目录，默认 /etc/vnt2_config"
+
+msgid "Device Architecture"
+msgstr "设备架构"
+
+msgid "Current detected:"
+msgstr "当前检测"
+
+msgid "Unknown"
+msgstr "未知"
+
+msgid "Download Mirror"
+msgstr "下载镜像源"
+
+msgid "Multiple mirrors ensure successful downloads"
+msgstr "多镜像源保障下载成功率"
+
+msgid "Auto Update"
+msgstr "自动更新"
+
+msgid "Automatically check and update programs periodically"
+msgstr "定期自动检查并更新程序"
+
+msgid "Update Interval (Days)"
+msgstr "更新间隔（天）"
+
+msgid "Number of days between automatic update checks"
+msgstr "自动检查更新的间隔天数"
+
+msgid "UPX Compression"
+msgstr "UPX 压缩"
+
+msgid "Use UPX to compress after installation"
+msgstr "安装后使用 UPX 压缩"
+
+msgid "Significantly reduce binary file size"
+msgstr "显著减小二进制文件体积"
+
+msgid "Process Watchdog (Respawn)"
+msgstr "进程守护（Respawn）"
+
+msgid "Failure Threshold (s)"
+msgstr "故障统计时长（秒）"
+
+msgid "Count crashes within %d seconds, 0 = unlimited"
+msgstr "在 %d 秒内统计崩溃次数，0 不统计"
+
+msgid "Restart Delay (s)"
+msgstr "重启延迟（秒）"
+
+msgid "Wait %d seconds before restart after crash"
+msgstr "异常退出后等待 %d 秒重启"
+
+msgid "Restart Retries"
+msgstr "最大重启次数"
+
+msgid "Max %d restarts then give up, 0 = unlimited"
+msgstr "最多重启 %d 次后不再重启，0 不限制"
+
+msgid "Firewall Forwarding"
+msgstr "防火墙转发"
+
+msgid "Allow virtual network to access LAN"
+msgstr "允许虚拟网络访问局域网"
+
+msgid "Allow LAN to access virtual network"
+msgstr "允许局域网访问虚拟网络"
+
+msgid "Allow virtual network to access WAN"
+msgstr "允许虚拟网络访问外网"
+
+msgid "Allow WAN to access virtual network"
+msgstr "允许外网访问虚拟网络"
+
+msgid "VNT Web External Access"
+msgstr "VNT Web 外网访问"
+
+msgid "Requires web_addr configuration"
+msgstr "需配置 web_addr"
+
+msgid "VNTS Web External Access"
+msgstr "VNTS Web 外网访问"
+
+msgid "Requires web_bind configuration"
+msgstr "需配置 web_bind"
+
+msgid "Current Version Info"
+msgstr "当前版本信息"
+
+msgid "Component"
+msgstr "组件"
+
+msgid "✓ Installed"
+msgstr "✓ 已安装"
+
+msgid "✗ Not installed"
+msgstr "✗ 未安装"
+
+msgid "Not installed"
+msgstr "未安装"
+
+msgid "Check Update"
+msgstr "检查更新"
+
+msgid "LuCI Plugin (luci-app-vnt2)"
+msgstr "LuCI 插件（luci-app-vnt2）"
+
+msgid "VNT Client (vnt2_cli / vnt2_web / vnt2_ctrl)"
+msgstr "VNT 客户端（vnt2_cli / vnt2_web / vnt2_ctrl）"
+
+msgid "VNTS Server (vnts2)"
+msgstr "VNTS 服务端（vnts2）"
+
+msgid "Check Upstream Version"
+msgstr "检查上游版本"
+
+msgid "Click to check and get version info"
+msgstr "点击检查并获取版本信息"
+
+msgid "Switch mirror and retry:"
+msgstr "切换镜像源重试："
+
+msgid "Retry"
+msgstr "重试"
+
+msgid "Version:"
+msgstr "版本："
+
+msgid "File:"
+msgstr "文件："
+
+msgid "Update Now"
+msgstr "立即更新"
+
+msgid "Preparing to download..."
+msgstr "准备下载..."
+
+msgid "Downloading..."
+msgstr "下载中..."
+
+msgid "✗ Please check version first"
+msgstr "✗ 请先检查版本"
+
+msgid "✗ Download start failed"
+msgstr "✗ 下载启动失败"
+
+msgid "Checking..."
+msgstr "检查中..."
+
+msgid "Checking"
+msgstr "检查中"
+
+msgid "Downloading"
+msgstr "下载中"
+
+msgid "Installing..."
+msgstr "安装中..."
+
+msgid "✓ Found %d versions"
+msgstr "✓ 找到 %d 个版本"
+
+msgid "✓ Installation complete: %s"
+msgstr "✓ 安装完成：%s"
+
+msgid "✗ %s"
+msgstr "✗ %s"
+
+msgid "Failed"
+msgstr "失败"
+
+msgid "✗ Timeout, please retry"
+msgstr "✗ 超时，请重试"
+
+msgid "✗ Start failed: %s"
+msgstr "✗ 启动失败：%s"
+
+msgid "✗ Error: %s"
+msgstr "✗ 出错：%s"
+
+msgid "Batch %s failed: %s"
+msgstr "批量 %s 失败：%s"
+
+#: log.js
+msgid "VNT2 Log"
+msgstr "VNT2 日志"
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "No Instance"
+msgstr "无实例"
+
+msgid "Client"
+msgstr "客户端"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Stopped"
+msgstr "已停止"
+
+msgid "Auto Download & Update"
+msgstr "自动下载与更新"
+
+msgid "All"
+msgstr "全部"
+
+msgid "Last %d lines"
+msgstr "最近 %d 行"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Clear Log"
+msgstr "清空日志"
+
+msgid "Scroll to Top"
+msgstr "滚动到顶部"
+
+msgid "Scroll to Bottom"
+msgstr "滚动到底部"
+
+msgid "Instance:"
+msgstr "实例："
+
+msgid "Auto Refresh (5s)"
+msgstr "自动刷新（5秒）"
+
+msgid "(No logs yet)"
+msgstr "（暂无日志）"
+
+msgid "(No logs yet. The instance might not be started or has no output)"
+msgstr "（暂无日志。实例可能未启动或无输出）"
+
+msgid "Failed to load log"
+msgstr "加载日志失败"
+
+#: common.js
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Confirm"
+msgstr "确认"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "✓ Running"
+msgstr "✓ 运行中"
+
+msgid "✗ Not running"
+msgstr "✗ 未运行"
+
+#: i18n-map.js (init.d 输出)
+msgid "VNT2: starting all enabled instances..."
+msgstr "VNT2：正在启动所有已启用实例..."
+
+msgid "Starting automatic download of vnt2/vnts2..."
+msgstr "正在自动下载 vnt2/vnts2..."
+
+msgid "Start failed: config file does not exist:"
+msgstr "启动失败：配置文件不存在："
+
+msgid "Start failed: unable to build startup command"
+msgstr "启动失败：无法构建启动命令"
+
+msgid "Start failed: binary is not executable:"
+msgstr "启动失败：二进制文件不可执行："
+
+msgid "Registered type="
+msgstr "已注册 type="
+
+msgid "Fix route:"
+msgstr "修复路由："
+
+#: i18n-map.js (vnt2-update.sh 输出)
+msgid "Checking version:"
+msgstr "正在检查版本："
+
+msgid "API request failed or no version found"
+msgstr "API请求失败或未找到版本"
+
+msgid "API request failed, please switch mirror"
+msgstr "API请求失败，请切换镜像源"
+
+msgid "Done, found"
+msgstr "完成，找到"
+
+msgid "versions"
+msgstr "个版本"
+
+msgid "No matching file found, please switch mirror"
+msgstr "未找到匹配的文件，请切换镜像源"
+
+msgid "No matching file found"
+msgstr "未找到匹配的文件"
+
+msgid "SHA256 verification passed"
+msgstr "SHA256验证通过"
+
+msgid "SHA256 verification failed, please re-download"
+msgstr "SHA256验证失败，请重新下载"
+
+msgid "sha256sum unavailable, skipping verification"
+msgstr "sha256sum不可用，跳过验证"
+
+msgid "Cache not found, please check version first"
+msgstr "未找到缓存，请先检查版本"
+
+msgid "Please check upstream version first"
+msgstr "请先检查上游版本"
+
+msgid "Download URL not found:"
+msgstr "下载地址未找到："
+
+msgid "Download URL not found, please re-check version"
+msgstr "下载地址未找到，请重新检查版本"
+
+msgid "Downloading:"
+msgstr "正在下载："
+
+msgid "Download failed rc="
+msgstr "下载失败，返回码="
+
+msgid "Download failed(rc="
+msgstr "下载失败（返回码="
+
+msgid "), please switch mirror"
+msgstr "），请切换镜像源"
+
+msgid "Download complete:"
+msgstr "下载完成："
+
+msgid "Starting installation..."
+msgstr "开始安装……"
+
+msgid "Installation succeeded"
+msgstr "安装成功"
+
+msgid "Installation failed"
+msgstr "安装失败"
+
+msgid "Package installation failed"
+msgstr "软件包安装失败"
+
+msgid "File type:"
+msgstr "文件类型："
+
+msgid "UPX compressing:"
+msgstr "UPX压缩："
+
+msgid "UPX succeeded"
+msgstr "UPX压缩成功"
+
+msgid "UPX failed, copying directly"
+msgstr "UPX压缩失败，直接复制"
+
+msgid "Installed:"
+msgstr "已安装："
+
+msgid "Not found:"
+msgstr "未找到："
+
+msgid "Not ELF, skipping:"
+msgstr "非ELF文件，跳过："
+
+msgid "Installation complete:"
+msgstr "安装完成："
+
+msgid "No installable file found"
+msgstr "未找到可安装的文件"
+
+msgid "Unknown file format"
+msgstr "未知文件格式"
+
+msgid "Service action:"
+msgstr "服务操作："
+
+msgid "=== Auto update:"
+msgstr "=== 自动更新："
+
+msgid "Local:"
+msgstr "本地："
+
+msgid "Upstream:"
+msgstr "上游："
+
+msgid "Already up to date, skipping"
+msgstr "已是最新，跳过"
+
+msgid "Already up to date("
+msgstr "已是最新（"
+
+msgid "Updating:"
+msgstr "正在更新："
+
+msgid "Not installed"
+msgstr "未安装"
+
+msgid "Unknown"
+msgstr "未知"
+
+#: i18n-map.js (vnt2-run.sh 输出)
+msgid "［INFO］"
+msgstr "［信息］"
+
+msgid "［WARN］"
+msgstr "［警告］"
+
+msgid "［ERROR］"
+msgstr "［错误］"
+
+msgid "［DEBUG］"
+msgstr "［调试］"
+
+msgid "Starting:"
+msgstr "启动："
+
+msgid "Process exited"
+msgstr "进程已退出"
+
+msgid "Log truncated (exceeded 300KB)"
+msgstr "日志已截断（超过300KB）"
+
+msgid "mkfifo failed"
+msgstr "mkfifo失败"
