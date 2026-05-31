@@ -50,7 +50,7 @@ Path: `luci-app-vnt2` → Config Management → Client Config → New Config
 | Network ID                 | **Must be identical on both routers** |
 | Server Address             | Official server: `quic://101.35.230.139:6660` or self‑hosted address (see later) |
 | Custom Virtual IP          | Router A: `10.26.0.3`, Router B: `10.26.0.6` (you can plan your own) |
-| Inbound Listened Subnet    | Router A: the other side‘s LAN – `192.168.68.0/24,10.26.0.6`<br>Router B: `192.168.11.0/24,10.26.0.3` |
+| Inbound Listened Subnet    | Router A: the other side's LAN – `192.168.68.0/24,10.26.0.6`<br>Router B: `192.168.11.0/24,10.26.0.3` |
 | Outbound Allowed Subnet    | Local LAN subnet (e.g., Router A `192.168.11.0/24`, Router B `192.168.68.0/24`). You can also use `0.0.0.0/0` to allow all. |
 | Virtual Interface Name     | Leave empty for auto‑generation |
 | Device Name                | Leave empty for auto‑detection |
@@ -128,3 +128,4 @@ The configuration is almost the same as the **client config** above. The only di
 
 **Enjoy your VNT network!**
 ```
+
