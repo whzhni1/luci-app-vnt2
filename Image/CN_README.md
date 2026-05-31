@@ -2,7 +2,7 @@
 
 # LuCI - VNT2 组网管理界面  # [VNT VNTS 设置教程](README.md)
 
-> **Language:** [中文](Image/CN_README.md) | [English](/README.md)
+> **Language:** [中文](CN_README.md) | [English](/README.md)
 
 >luci-app-vnt2 一个为 OpenWrt LuCI 设计的 VNT 虚拟组网管理前端，支持多实例并发、实时监控、一键更新与防火墙自动放行。
 
