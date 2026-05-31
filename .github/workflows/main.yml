@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: ver
-        run: echo "tag=v$(awk -F':=' '/PKG_VERSION/{print $2}' luci-app-vnt2/Makefile)" >> $GITHUB_OUTPUT
+        run: echo "tag=v$(awk -F':=' '/^PKG_VERSION:=/{print $2}' luci-app-vnt2/Makefile)" >> $GITHUB_OUTPUT
       - uses: actions/download-artifact@v4
         with:
           path: ipks
