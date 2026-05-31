@@ -65,8 +65,8 @@ Path: `luci-app-vnt2` → Config Management → Client Config → New Config
 3. Click **Save & Apply**
 
 > Reference images:  
-> ![Reference](Image/A_vnt2_config.png)  
-> ![Reference](Image/B_vnt2_config.png)
+> ![Reference](../Image/A_vnt2_config.png)  
+> ![Reference](../Image/B_vnt2_config.png)
 
 ---
 
@@ -94,7 +94,7 @@ Path: `luci-app-vnt2` → Config Management → Server Config → New Config
 2. Select the newly created config
 3. Click **Save & Apply**
 
-> Reference image: ![Reference](Image/A_vnts2_config.png)
+> Reference image: ![Reference](../Image/A_vnts2_config.png)
 
 ---
 
@@ -114,7 +114,7 @@ The configuration is almost the same as the **client config** above. The only di
 
 ### Reference image
 
-- ![Reference](Image/vnt_A_vnts2_config.png)
+- ![Reference](../Image/vnt_A_vnts2_config.png)
 
 ---
 
