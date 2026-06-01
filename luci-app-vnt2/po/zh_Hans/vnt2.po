@@ -1,6 +1,6 @@
 # VNT2 LuCI i18n Chinese (Simplified)
 # zh-cn
-# v1.0
+# v1.1
 
 msgid ""
 msgstr ""
@@ -730,6 +730,9 @@ msgstr "SHA256验证失败，请重新下载"
 msgid "sha256sum unavailable, skipping verification"
 msgstr "sha256sum不可用，跳过验证"
 
+msgid "Downloaded:"
+msgstr "已下载："
+
 msgid "Cache not found, please check version first"
 msgstr "未找到缓存，请先检查版本"
 
@@ -825,6 +828,10 @@ msgstr "未安装"
 
 msgid "Unknown"
 msgstr "未知"
+
+msgid "Language pack detected:"
+msgstr "检测到语言包："
+
 
 #: i18n-map.js (vnt2-run.sh 输出)
 msgid "［INFO］"

@@ -150,6 +150,7 @@ cmd_check() {
                 fname="${line##*/}"
                 [ -z "$fname" ] && continue
                 case "$fname" in *sha256*) continue ;; esac
+                case "$assets_slim" in *"\"$fname\""*) continue ;; esac
                 [ "$first_asset" -eq 1 ] && first_asset=0 || assets_slim="${assets_slim},"
                 assets_slim="${assets_slim}\"$fname\""
                 ;;
@@ -195,62 +196,35 @@ verify_download() {
 }
 
 cmd_download() {
-    local proj="$1" tag="$2" fname="$3" upx="${4:-}"
+    local proj="$1" tag="$2" fnames="$3" upx="${4:-}"
     [ -z "$upx" ] || [ "$upx" = "0" ] && \
         upx="$(uci get vnt2.global.upx_compressed 2>/dev/null || echo 0)"
 
     rm -f "$(log_file "$proj")"
     set_status "$proj" "downloading"
-    log "$proj" "Downloading: tag=$tag file=$fname upx=$upx"
+    log "$proj" "Downloading: tag=$tag files=$fnames upx=$upx"
 
-    local cache dl_url
-    cache="$(cache_full "$proj")"
-    [ ! -f "$cache" ] && {
+    [ ! -f "$(cache_full "$proj")" ] && {
         log "$proj" "Cache not found, please check version first"
         set_status "$proj" "error:Please check upstream version first"
         return 1
     }
 
-    dl_url="$(grep -o "https://[^\"']*/${fname}" "$cache" | head -1)"
-    [ -z "$dl_url" ] && {
-        log "$proj" "Download URL not found: $fname"
-        set_status "$proj" "error:Download URL not found, please re-check version"
-        return 1
-    }
+    local installed="" fname
+    for fname in $fnames; do
+        local is_lang=0
+        case "$fname" in *i18n*) is_lang=1 ;; esac
+        if [ $is_lang -eq 1 ]; then
+            _download_and_install "$proj" "$fname" "0" \
+                && installed="${installed:+${installed}, }${fname}" \
+                || log "$proj" "Language pack skipped: $fname"
+        else
+            _download_and_install "$proj" "$fname" "$upx" || return 1
+            installed="${installed:+${installed}, }${fname}"
+        fi
+    done
 
-    # log "$proj" "URL: $dl_url"
-
-    local tmp
-    tmp="$(tmp_file "$proj" "$fname")"
-    rm -f "$tmp"
-
-    pm_install curl -fsSL --connect-timeout 15 --max-time 300 \
-        --retry 3 --retry-delay 5 \
-        -o "$tmp" "$dl_url" >> "$(log_file "$proj")" 2>&1
-    local rc=$?
-
-    if [ $rc -ne 0 ] || [ ! -s "$tmp" ]; then
-        log "$proj" "Download failed rc=$rc"
-        set_status "$proj" "error:Download failed(rc=$rc), please switch mirror"
-        rm -f "$tmp"
-        return 1
-    fi
-
-    local size
-    size="$(wc -c < "$tmp" | tr -d ' ')"
-    log "$proj" "Download complete: $(format_size "$size")"
-    verify_download "$proj" "$tmp" || return 1
-    set_status "$proj" "installing"
-   log "$proj" "Starting installation..."
-
-    if [ "$proj" = "luci-app-vnt2" ]; then
-        pm_install "$tmp" local \
-            && { log "$proj" "Installation succeeded"; set_status "$proj" "done:luci-app-vnt2"; } \
-            || { log "$proj" "Installation failed"; set_status "$proj" "error:Package installation failed";   }
-        rm -f "$tmp"
-    else
-        _install_bin "$proj" "$tmp" "$upx"
-    fi
+    set_status "$proj" "done:${installed:-$fnames}"
 }
 
 _do_install() {
@@ -266,6 +240,43 @@ _do_install() {
     fi
     chmod 755 "$dst"
     log "$proj" "Installed: $dst"
+}
+
+_download_and_install() {
+    local proj="$1" fname="$2" upx="$3"
+    local cache dl_url tmp size
+
+    cache="$(cache_full "$proj")"
+    dl_url="$(grep -o "https://[^\"']*/${fname}" "$cache" | head -1)"
+    [ -z "$dl_url" ] && { log "$proj" "URL not found: $fname"; return 1; }
+
+    tmp="$(tmp_file "$proj" "$fname")"
+    rm -f "$tmp"
+
+    curl -fsSL --connect-timeout 15 --max-time 300 \
+        --retry 3 --retry-delay 5 \
+        -o "$tmp" "$dl_url" >> "$(log_file "$proj")" 2>&1
+    local rc=$?
+
+    if [ $rc -ne 0 ] || [ ! -s "$tmp" ]; then
+        log "$proj" "Download failed rc=$rc: $fname"
+        rm -f "$tmp"
+        return 1
+    fi
+
+    size="$(wc -c < "$tmp" | tr -d ' ')"
+    log "$proj" "Downloaded: $fname $(format_size "$size")"
+    verify_download "$proj" "$tmp" || return 1
+
+    set_status "$proj" "installing"
+    if [ "$proj" = "luci-app-vnt2" ]; then
+        pm_install "$tmp" \
+            && log "$proj" "Installed: $fname" \
+            || { log "$proj" "Install failed: $fname"; rm -f "$tmp"; return 1; }
+        rm -f "$tmp"
+    else
+        _install_bin "$proj" "$tmp" "$upx"
+    fi
 }
 
 _install_bin() {

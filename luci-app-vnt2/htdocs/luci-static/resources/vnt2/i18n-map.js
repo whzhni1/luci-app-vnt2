@@ -35,6 +35,7 @@ return baseclass.extend({
             ['SHA256 verification passed',       _('SHA256 verification passed')],
             ['SHA256 verification failed, please re-download',  _('SHA256 verification failed, please re-download')],
             ['sha256sum unavailable, skipping verification',    _('sha256sum unavailable, skipping verification')],
+            ['Downloaded:',     _('Downloaded:')],
             ['Cache not found, please check version first',     _('Cache not found, please check version first')],
             ['Please check upstream version first',             _('Please check upstream version first')],
             ['Download URL not found:',          _('Download URL not found:')],
@@ -67,6 +68,8 @@ return baseclass.extend({
             ['Updating:',                        _('Updating:')],
             ['Not installed',                    _('Not installed')],
             ['Unknown',                          _('Unknown')],
+            ['Language pack detected:',          _('Language pack detected:')],
+
         ];
         return this._kwMap;
     },

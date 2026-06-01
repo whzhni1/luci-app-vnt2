@@ -46,6 +46,12 @@ var FW_OPTIONS = [
     { key: 'fw_vnts_web', label: _('VNTS Web External Access'), desc: _('Requires web_bind configuration') },
 ];
 
+function detectLang() {
+    var htmlLang = document.documentElement.lang || '';
+    if (htmlLang && htmlLang !== 'auto') return htmlLang.toLowerCase();
+    return (navigator.language || navigator.userLanguage || '').toLowerCase();
+}
+
 return view.extend({
 
     load: function() {
@@ -474,6 +480,26 @@ return view.extend({
         var upx = project !== 'luci-app-vnt2' &&
                   !!(this._el('s-upx') || {}).checked;
 
+        if (project === 'luci-app-vnt2' && fname.toLowerCase().indexOf('i18n') === -1) {
+            var lang = detectLang();
+            var langFile = '';
+            var releases = self._currentReleases || [];
+            for (var i = 0; i < releases.length; i++) {
+                if (releases[i].tag === tag) {
+                    var files = releases[i].filenames || [];
+                    for (var j = 0; j < files.length; j++) {
+                        var fn = files[j].toLowerCase();
+                        if (fn.indexOf('i18n') !== -1 && fn.indexOf(lang) !== -1) {
+                            langFile = files[j];
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            if (langFile) fname = fname + ' ' + langFile;
+        }
+
         if (btn) btn.disabled = true;
         self._hide(bid + '-mirror-row');
         self._showLog(bid, _('Preparing to download...'));
@@ -574,6 +600,7 @@ return view.extend({
         var self = this;
         if (!releasesData || !releasesData.releases) return;
         var releases = releasesData.releases;
+        self._currentReleases = releases;
         var tagSel   = this._el(bid + '-tag');
         var fileSel  = this._el(bid + '-file');
         if (!tagSel || !fileSel) return;
@@ -593,6 +620,8 @@ return view.extend({
             release.filenames.forEach(function(fname, idx) {
                 fileSel.appendChild(E('option', { 'value': fname }, fname));
                 if (matched < 0 && arch && fname.indexOf(arch) !== -1) matched = idx;
+                if (matched < 0 && bid.indexOf('luci-app') !== -1
+                    && fname.indexOf('luci-app') !== -1) matched = idx;
             });
             if (matched >= 0) fileSel.selectedIndex = matched;
         }
