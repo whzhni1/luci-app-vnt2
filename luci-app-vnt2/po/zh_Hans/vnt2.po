@@ -832,7 +832,6 @@ msgstr "未知"
 msgid "Language pack detected:"
 msgstr "检测到语言包："
 
-
 #: i18n-map.js (vnt2-run.sh 输出)
 msgid "［INFO］"
 msgstr "［信息］"
