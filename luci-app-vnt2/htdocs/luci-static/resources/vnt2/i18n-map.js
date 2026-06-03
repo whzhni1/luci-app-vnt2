@@ -21,7 +21,7 @@ return baseclass.extend({
             ['［DEBUG］',  _('［DEBUG］')],
             ['Starting:',                        _('Starting:')],
             ['Process exited',                   _('Process exited')],
-            ['Log truncated (exceeded 300KB)',    _('Log truncated (exceeded 300KB)')],
+            ['Log truncated (exceeded',    _('Log truncated (exceeded')],
             ['mkfifo failed',                    _('mkfifo failed')],
 
              // vnt2-update.sh

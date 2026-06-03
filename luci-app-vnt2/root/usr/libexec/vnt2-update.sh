@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.5
+# VNT2 更新脚本 v1.6
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -345,11 +345,11 @@ pick_latest() {
 
     local f
     for pattern in "$arch" "$(echo "$arch" | cut -d'_' -f1)"; do
-        f="$(echo "$filenames" | grep "$pattern" | head -1)"
+        f="$(echo "$filenames" | grep "$pattern" | grep -v 'i18n' | head -1)"
         [ -n "$f" ] && { LATEST_FILE="$f"; return 0; }
     done
 
-    LATEST_FILE="$(echo "$filenames" | head -1)"
+    LATEST_FILE="$(echo "$filenames" | grep -v 'i18n' | head -1)"
     [ -n "$LATEST_FILE" ]
 }
 
@@ -399,7 +399,26 @@ auto_update_one() {
     fi
 
     log "$proj" "Updating: $LATEST_TAG  $LATEST_FILE"
-    cmd_download "$proj" "$LATEST_TAG" "$LATEST_FILE" "$UPX"
+
+    local fnames="$LATEST_FILE"
+    if [ "$proj" = "luci-app-vnt2" ]; then
+        local lang lang_file
+        lang=$(
+            for f in /usr/lib/lua/luci/i18n/*.lmo; do
+                [ -f "$f" ] || continue
+                tmp="${f%.lmo}"
+                echo "${tmp##*.}"
+            done | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}'
+        )
+        if [ -n "$lang" ]; then
+            local slim; slim="$(cache_slim "$proj")"
+            lang_file=$(grep -oE '"[^"]*i18n[^"]*'"$lang"'[^"]*"' "$slim" | tr -d '"' | head -1)
+            [ -n "$lang_file" ] && fnames="$fnames $lang_file" && \
+                log "$proj" "Language pack detected: $lang_file"
+        fi
+    fi
+
+    cmd_download "$proj" "$LATEST_TAG" "$fnames" "$UPX"
 }
 
 cmd_auto_update() {

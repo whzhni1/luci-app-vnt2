@@ -480,6 +480,15 @@ msgstr "最大重启次数"
 msgid "Max %d restarts then give up, 0 = unlimited"
 msgstr "最多重启 %d 次后不再重启，0 不限制"
 
+msgid "Log Settings"
+msgstr "日志设置"
+
+msgid "Each instance log truncated at %d KB"
+msgstr "每个实例的日志超过 %d KB 时截断"
+
+msgid "Log Max Size (KB)"
+msgstr "日志最大大小（KB）"
+
 msgid "Firewall Forwarding"
 msgstr "防火墙转发"
 
@@ -851,8 +860,8 @@ msgstr "启动："
 msgid "Process exited"
 msgstr "进程已退出"
 
-msgid "Log truncated (exceeded 300KB)"
-msgstr "日志已截断（超过300KB）"
+msgid "Log truncated (exceeded"
+msgstr "日志已截断（超过"
 
 msgid "mkfifo failed"
 msgstr "mkfifo失败"

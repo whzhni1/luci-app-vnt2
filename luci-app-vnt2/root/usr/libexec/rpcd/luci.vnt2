@@ -30,6 +30,7 @@ const SETTING_DEFS = [
     ["respawn_threshold",  "3600"],
     ["respawn_timeout",    "5"   ],
     ["respawn_retry",      "5"   ],
+    ["log_max_kb",      "300"             ],
     ["fw_vnt_to_lan",   "1"               ],
     ["fw_lan_to_vnt",   "1"               ],
     ["fw_vnt_to_wan",   "0"               ],
@@ -556,7 +557,7 @@ function cmdSaveSettings(args) {
     let uci = cursor();
     uci.load("vnt2");
     let stringKeys = { bin_path:1, config_path:1, arch:1, mirror:1 };
-    let intKeys    = { update_interval:1, respawn_threshold:1, respawn_timeout:1, respawn_retry:1 };
+    let intKeys    = { update_interval:1, respawn_threshold:1, respawn_timeout:1, respawn_retry:1, log_max_kb:1 };
     for (let i = 0; i < length(SETTING_DEFS); i++) {
         let k = SETTING_DEFS[i][0];
         if (stringKeys[k]) {
@@ -749,6 +750,7 @@ const SIGNATURES = {
         respawn_threshold:    "Integer",
         respawn_timeout:      "Integer",
         respawn_retry:   "Integer",
+        log_max_kb:      "Integer",
         fw_vnt_to_lan:   "String",
         fw_lan_to_vnt:   "String",
         fw_vnt_to_wan:   "String",

@@ -18,6 +18,7 @@ var callSaveSettings       = rpcDeclare('save_settings', [
     'bin_path','config_path','arch','mirror',
     'auto_update','update_interval','upx_compressed',
     'respawn_threshold','respawn_timeout','respawn_retry',
+    'log_max_kb',
     'fw_vnt_to_lan','fw_lan_to_vnt',
     'fw_vnt_to_wan','fw_wan_to_vnt',
     'fw_vnt_web','fw_vnts_web'
@@ -93,6 +94,7 @@ return view.extend({
             parseInt(g('respawn_threshold')) || 3600,
             parseInt(g('respawn_timeout'))   || 5,
             parseInt(g('respawn_retry'))     || 5,
+            parseInt(g('log_max_kb'))        || 300,
             boolStr(g('fw_vnt_to_lan')),
             boolStr(g('fw_lan_to_vnt')),
             boolStr(g('fw_vnt_to_wan')),
@@ -273,6 +275,25 @@ return view.extend({
                         ];
                     })()
                 ]),
+            E('div', { 'class': 'cbi-section' }, [
+                E('h3', {}, _('Log Settings')),
+                ...(function() {
+                    var defLogMax = g('log_max_kb') || '300';
+                    var descLogMax = E('span', {}, _('Each instance log truncated at %d KB').format(defLogMax));
+                    var inpLogMax = E('input', { 'type': 'number', 'class': 'cbi-input-text',
+                        'id': 's-log-max-kb',
+                        'value': defLogMax, 'min': '50', 'max': '10240', 'style': 'width:100px;',
+                        'change': function() {
+                            var v = this.value || '300';
+                            uci.set('vnt2', 'global', 'log_max_kb', v);
+                            descLogMax.textContent = _('Each instance log truncated at %d KB').format(v);
+                        }
+                    });
+                    return [
+                        vui.buildFormRow(_('Log Max Size (KB)'), inpLogMax, descLogMax),
+                    ];
+                })()
+            ]),
             E('div', { 'class': 'cbi-section' }, [
                 E('h3', {}, _('Firewall Forwarding')),
                 E('div', {}, FW_OPTIONS.map(buildCheckRow))
