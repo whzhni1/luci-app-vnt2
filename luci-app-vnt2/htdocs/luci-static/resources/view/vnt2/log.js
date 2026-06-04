@@ -129,7 +129,7 @@ return view.extend({
         var instanceSelect = E('select', {
             'id':     'vnt2-inst-select',
             'class':  'cbi-input-select',
-            'style':  'width:auto;',
+            'style':  'width:auto;max-width:180px;min-width:0;box-sizing:border-box;',
             'change': function(ev) {
                 self._currentInstance = ev.target.value;
                 self._loadLog();
@@ -187,7 +187,8 @@ return view.extend({
             'style': [
                 'display:flex', 'align-items:center', 'flex-wrap:wrap', 'gap:8px',
                 'padding:12px', 'border-radius:8px', 'box-shadow:0 0 0 1px #ddd',
-                'margin-bottom:12px'
+                'margin-bottom:12px', 'width:100%', 'max-width:100%',
+                'box-sizing:border-box', 'overflow:hidden'
             ].join(';')
         }, [
             E('label', {}, _('Instance:')),

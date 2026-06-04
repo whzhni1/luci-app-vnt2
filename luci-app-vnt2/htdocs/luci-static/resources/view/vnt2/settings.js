@@ -71,6 +71,11 @@ return view.extend({
         self._i18n     = data[1];
         self._sysinfo  = data[3] || {};
         self._binaries = data[4] || {};
+        window.requestAnimationFrame(function() {
+            var initHash = location.hash.replace('#','');
+            var footer = document.querySelector('.cbi-page-actions');
+            if (footer) footer.style.display = initHash === 'tab-update' ? 'none' : '';
+        });
         return E('div', { 'class': 'cbi-map' }, [
             E('h2', {}, _('VNT2 Settings & Update')),
             self._buildTabContainer([
@@ -123,8 +128,11 @@ return view.extend({
         var self   = this;
         var header = E('div', { 'style': 'display:flex;border-bottom:2px solid #ddd;margin-bottom:20px;' });
         var body   = E('div', {});
+        var activeHash = location.hash.replace('#','') || tabs[0].id;
+        var hasMatch = tabs.some(function(t){ return t.id === activeHash; });
+        if(!hasMatch) activeHash = tabs[0].id;
         tabs.forEach(function(tab, idx) {
-            var active = idx === 0;
+            var active = tab.id === activeHash;
             header.appendChild(E('div', {
                 'data-tab': tab.id,
                 'style': [
@@ -144,6 +152,7 @@ return view.extend({
     },
 
     _switchTab: function(activeId) {
+        location.hash = activeId;
         document.querySelectorAll('[data-tab]').forEach(function(el) {
             var active = el.getAttribute('data-tab') === activeId;
             el.style.borderBottom = active ? '2px solid #3498db' : '2px solid transparent';
@@ -174,7 +183,7 @@ return view.extend({
         function buildText(id, uciKey, style, fallback) {
             return E('input', { 'type': 'text', 'class': 'cbi-input-text', 'id': id,
                 'value':  g(uciKey) || fallback || '',
-                'style':  style || 'width:360px;',
+                'style':  style || 'width:100%;max-width:360px;box-sizing:border-box;',
                 'change': function() { uci.set('vnt2', 'global', uciKey, this.value.trim()); }
             });
         }
@@ -206,7 +215,7 @@ return view.extend({
                     buildText('s-config-path', 'config_path'),
                     _('Directory of configuration files, default /etc/vnt2_config')),
                 vui.buildFormRow(_('Device Architecture'),
-                    buildText('s-arch', 'arch', 'width:200px;'),
+                    buildText('s-arch', 'arch', 'width:100%;max-width:200px;box-sizing:border-box;'),
                     _('Current detected:') + (self._sysinfo.arch || _('Unknown'))),
                 vui.buildFormRow(_('Download Mirror'), mirrorSel, _('Multiple mirrors ensure successful downloads')),
                 vui.buildFormRow(_('Auto Update'),
@@ -303,17 +312,16 @@ return view.extend({
 
     _buildUpdateTab: function() {
         var self = this, sys = self._sysinfo, bins = self._binaries;
-        var thStyle = 'padding:8px 12px;text-align:center;';
-        var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;';
+        var thStyle = 'padding:8px 12px;text-align:center;white-space:nowrap;';
+        var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;white-space:nowrap;';
 
         return E('div', { 'class': 'cbi-section' }, [
             E('h3', {}, _('Current Version Info')),
-            E('div', { 'style': 'width:100%;display:block;margin-bottom:20px;' },
+            E('div', { 'style': 'width:100%;max-width:100%;box-sizing:border-box;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #ddd;border-radius:8px;margin-bottom:20px;' },
                 E('table', {
                     'style': [
-                        'width:100%', 'border-collapse:separate', 'border-spacing:0',
-                        'border:1px solid #ddd', 'border-radius:8px',
-                        'overflow:hidden', 'box-sizing:border-box'
+                        'width:100%', 'min-width:360px', 'border-collapse:collapse',
+                        'border-spacing:0', 'box-sizing:border-box'
                     ].join(';')
                 }, [
                     E('thead', {}, E('tr', {},
@@ -406,13 +414,13 @@ return view.extend({
             ]),
             E('div', { 'id': bid + '-selects',
                 'style': 'display:none;margin-top:10px;' }, [
-                E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;' }, [
+                E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;box-sizing:border-box;overflow:hidden;' }, [
                     E('label', {}, _('Version:')),
                     E('select', { 'class': 'cbi-input-select', 'id': bid + '-tag',
-                        'style': 'width:auto;' }),
+                        'style': 'width:auto;max-width:100%;min-width:0;box-sizing:border-box;' }),
                     E('label', {}, _('File:')),
                     E('select', { 'class': 'cbi-input-select', 'id': bid + '-file',
-                        'style': 'width:auto;' }),
+                        'style': 'width:auto;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;' }),
                     E('button', {
                         'class': 'btn cbi-button-apply',
                         'id':    bid + '-btn',

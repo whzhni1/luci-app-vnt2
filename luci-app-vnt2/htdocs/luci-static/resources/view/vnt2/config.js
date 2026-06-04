@@ -122,6 +122,7 @@ function switchTab(self, tab) {
 }
 
 function showList() {
+    location.hash = _tab;
     var lw = document.getElementById('vnt2-list-wrap');
     var ew = document.getElementById('vnt2-edit-wrap');
     if (lw) lw.style.display = '';
@@ -154,8 +155,14 @@ function refreshStatus(self) {
 function rebuildTable(self) {
     var wrap = document.getElementById('vnt2-table-wrap');
     if (!wrap) return;
+    var tableWrap = wrap.querySelector('.vnt2-table-wrap');
+    var scrollLeft = tableWrap ? tableWrap.scrollLeft : 0;
     wrap.innerHTML = '';
     wrap.appendChild(buildTable(self));
+    var newTableWrap = wrap.querySelector('.vnt2-table-wrap');
+    if (newTableWrap && scrollLeft > 0) {
+        newTableWrap.scrollLeft = scrollLeft;
+    }
 }
 
 function buildTable(self) {
@@ -163,15 +170,14 @@ function buildTable(self) {
     if (!configs.length)
         return E('p', { 'class':'vnt2-empty' },
             _('No %s configurations yet. Click "New Config" to add one.').format(TABS[_tab]));
-    var thStyle = 'padding:8px 12px;text-align:center;';
+    var thStyle = 'padding:8px 12px;text-align:center;white-space:nowrap;';
     var heads   = [_('Enabled'), _('Name'), _('Start Method'), _('Status'), _('Actions')];
-    return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;' },
+    return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;max-width:100%;box-sizing:border-box;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #ddd;border-radius:8px;' },
         E('table', {
             'class': 'vnt2-table',
             'style': [
-                'width:100%', 'min-width:480px', 'border-collapse:separate',
-                'border-spacing:0', 'border:1px solid #ddd', 'border-radius:8px',
-                'overflow:hidden', 'box-sizing:border-box'
+                'width:100%', 'min-width:480px', 'border-collapse:collapse',
+                'border-spacing:0', 'box-sizing:border-box'
             ].join(';')
         }, [
             E('thead', {}, E('tr', {},
@@ -185,7 +191,7 @@ function buildTable(self) {
 function buildRow(self, cfg) {
     var tab     = _tab;
     var name    = cfg.name;
-    var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;';
+    var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;white-space:nowrap;';
     var state   = ensureState(tab, name);
     var running = !!(self._status && self._status[name]);
 
@@ -265,6 +271,7 @@ function openEditor(self, name, isNew) {
     if (!ew) return;
     ew.innerHTML = '';
     ew.appendChild(E('div', { 'class':'vnt2-loading' }, _('Loading configuration...')));
+    location.hash = _tab + (isNew ? '&new' : '&edit=' + name);
     showEdit();
     var tab = _tab;
     var p   = (isNew || !name)
@@ -800,7 +807,16 @@ return view.extend({
             ])
         ]);
 
-        loadListState(initTab).then(function() { rebuildTable(self); });
+        loadListState(initTab).then(function() {
+            rebuildTable(self);
+            var hash = location.hash.replace('#', '');
+            if (hash.indexOf('&edit=') !== -1) {
+                var editName = hash.split('&edit=')[1];
+                openEditor(self, editName, false);
+            } else if (hash.indexOf('&new') !== -1) {
+                openEditor(self, '', true);
+            }
+        });
 
         window.requestAnimationFrame(function() {
             var footer = document.querySelector('.cbi-page-actions');

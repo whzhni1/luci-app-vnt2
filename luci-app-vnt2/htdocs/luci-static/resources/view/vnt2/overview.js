@@ -204,7 +204,9 @@ return view.extend({
                 'style': [
                     'text-align:center', 'padding:12px', 'margin-top:16px',
                     'border-radius:8px', 'outline:1px solid #ddd',
-                    'font-size:13px', 'color:#666', 'margin-bottom:60px'
+                    'font-size:13px', 'color:#666', 'margin-bottom:60px',
+                    'box-sizing:border-box', 'width:100%', 'max-width:100%',
+                    'overflow:hidden', 'word-break:break-word'
                 ].join(';')
             }, linkNodes)
         ]);
@@ -257,15 +259,14 @@ return view.extend({
         if (!instances.length)
             return E('p', { 'style':'color:#888;' },
                 _('No instances, please create one on the Client or Server configuration page first.'));
-        var thStyle = 'padding:8px 12px;text-align:center;';
+        var thStyle = 'padding:8px 12px;text-align:center;white-space:nowrap;';
         var heads   = [_('Instance Name'),_('Type'),_('Uptime'),'PID','CPU／RAM',_('Actions'),'Web UI'];
-        return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;display:block;' },
+        return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;max-width:100%;box-sizing:border-box;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #ddd;border-radius:8px;' },
             E('table', {
                 'class': 'vnt2-table',
                 'style': [
-                    'width:100%', 'min-width:480px', 'border-collapse:separate',
-                    'border-spacing:0', 'border:1px solid #ddd', 'border-radius:8px',
-                    'overflow:hidden', 'box-sizing:border-box'
+                    'width:100%', 'min-width:480px', 'border-collapse:collapse',
+                    'border-spacing:0', 'box-sizing:border-box'
                 ].join(';')
             }, [
                 E('thead', {}, E('tr', {},
@@ -281,7 +282,7 @@ return view.extend({
         var self    = this;
         var running = !!inst.running;
         var hasWeb  = !!(inst.web_addr && inst.web_addr !== '');
-        var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;color:'
+        var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;white-space:nowrap;color:'
             + runningColor(running) + ';';
         return E('tr', { 'id':'vnt2-row-' + inst.name }, [
             E('td', { 'class':'vnt2-col-name', 'style':tdStyle }, inst.name),
@@ -301,13 +302,13 @@ return view.extend({
     _buildActionBtns: function(inst) {
         var self    = this;
         var running = !!inst.running;
-        var wrap    = E('div', { 'style':'display:flex;gap:4px;justify-content:center;' });
+        var wrap    = E('div', { 'style':'display:flex;flex-wrap:nowrap;gap:4px;justify-content:center;align-items:center;' });
         ACTIONS.forEach(function(act) {
             var disabled = running !== act.needRunning;
             wrap.appendChild(E('button', {
                 'class':    'btn cbi-button' + (disabled ? '' : '-action'),
                 'disabled': disabled ? 'disabled' : null,
-                'style': 'padding:2px 8px;font-size:12px;' + (act.color && !disabled ? 'color:' + act.color + ';border-color:' + act.color + ';' : ''),
+                'style': 'padding:2px 6px;font-size:11px;white-space:nowrap;' + (act.color && !disabled ? 'color:' + act.color + ';border-color:' + act.color + ';' : ''),
                 'click':    function() {
                     if (!disabled) self._doAction(act, inst.name);
                 }
