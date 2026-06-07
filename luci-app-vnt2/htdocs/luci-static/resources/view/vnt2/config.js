@@ -11,13 +11,13 @@ function rpcDeclare(method, params) {
 var callGetTemplateFields = rpcDeclare('get_template_fields', ['type']);
 var callListConfigs       = rpcDeclare('list_configs',        ['filter']);
 var callReadConfig        = rpcDeclare('read_config',         ['name','type']);
-var callSaveConfig = rpcDeclare('save_config', ['name','type','content','old_name']);
+var callSaveConfig        = rpcDeclare('save_config',         ['name','type','content','old_name']);
 var callDeleteConfig      = rpcDeclare('delete_config',       ['name','type']);
 var callReadTemplate      = rpcDeclare('read_template',       ['type']);
 var callListInstances     = rpcDeclare('list_instances',      []);
 var callSetEnabled        = rpcDeclare('set_enabled',         ['type','configs']);
 var callGetEnabled        = rpcDeclare('get_enabled',         ['type']);
-var callInstanceAction  = rpcDeclare('instance_action',  ['name', 'action']);
+var callInstanceAction    = rpcDeclare('instance_action',     ['name','action']);
 
 var TABS          = { vnt:_('Client'), vnts:_('Server') };
 var START_METHODS = { vnt:['vnt2_cli','vnt2_web'], vnts:['vnts2'] };
@@ -29,6 +29,15 @@ var _listStateLoaded = { vnt:false, vnts:false };
 var _statusTimer     = null;
 
 function defaultMethod(tab) { return START_METHODS[tab][0]; }
+
+function parseConfigs(r) {
+    return (r && Array.isArray(r.configs)) ? r.configs : [];
+}
+
+function resetListState() {
+    _listState       = { vnt:{}, vnts:{} };
+    _listStateLoaded = { vnt:false, vnts:false };
+}
 
 function parseInstanceList(instances) {
     var status = {}, webAddr = {};
@@ -62,22 +71,19 @@ function loadListState(tab) {
 }
 
 function saveListState(self, silent) {
-    var state    = _listState;
     var promises = Object.keys(TABS).map(function(tab) {
         if (!_listStateLoaded[tab]) return Promise.resolve();
-        var configs = Object.keys(state[tab]).map(function(name) {
+        var configs = Object.keys(_listState[tab]).map(function(name) {
             return {
                 name:         name,
-                enabled:      state[tab][name].enabled,
-                start_method: state[tab][name].start_method
+                enabled:      _listState[tab][name].enabled,
+                start_method: _listState[tab][name].start_method
             };
         });
         return callSetEnabled(tab, configs);
     });
-
     return Promise.all(promises).then(function(results) {
-        var failed = results.filter(function(r) { return r && r.result !== 'ok'; });
-        if (failed.length) {
+        if (results.some(function(r) { return r && r.result !== 'ok'; })) {
             self._ui.notify(_('Partial save failed'), 'error');
             return;
         }
@@ -86,6 +92,21 @@ function saveListState(self, silent) {
     }).catch(function(err) {
         self._ui.notify(_('Save error: %s').format(String(err)), 'error');
     });
+}
+
+function setTabActive(el, active) {
+    if (!el) return;
+    el.style.borderBottom = active ? '2px solid #3498db' : '2px solid transparent';
+    el.style.color        = active ? '#3498db' : '#666';
+}
+
+function toggleView(showListView) {
+    var lw = document.getElementById('vnt2-list-wrap');
+    var ew = document.getElementById('vnt2-edit-wrap');
+    if (!lw || !ew) return;
+    lw.style.display = showListView ? '' : 'none';
+    ew.style.display = showListView ? 'none' : '';
+    if (showListView) { ew.innerHTML = ''; location.hash = _tab; }
 }
 
 function switchTab(self, tab) {
@@ -97,16 +118,12 @@ function switchTab(self, tab) {
         _dirty        = false;
         location.hash = tab;
         Object.keys(TABS).forEach(function(t) {
-            var el = document.getElementById('vnt2-tab-' + t);
-            if (!el) return;
-            el.style.borderBottom = t === tab ? '2px solid #3498db' : '2px solid transparent';
-            el.style.color        = t === tab ? '#3498db' : '#666';
+            setTabActive(document.getElementById('vnt2-tab-' + t), t === tab);
         });
-        showList();
+        toggleView(true);
         if (!self._configs[tab]) {
             Promise.all([callListConfigs(tab), loadListState(tab)]).then(function(res) {
-                self._configs[tab] = (res[0] && Array.isArray(res[0].configs))
-                    ? res[0].configs : [];
+                self._configs[tab] = parseConfigs(res[0]);
                 rebuildTable(self);
             });
         } else {
@@ -114,24 +131,12 @@ function switchTab(self, tab) {
         }
     }
     if (editing && _dirty) {
-        self._ui.confirm(_('Discard Changes'), _('Unsaved changes will be lost when switching tabs. Are you sure?'))
+        self._ui.confirm(_('Discard Changes'),
+            _('Unsaved changes will be lost when switching tabs. Are you sure?'))
             .then(function(ok) { if (ok) doSwitch(); });
     } else {
         doSwitch();
     }
-}
-
-function showList() {
-    location.hash = _tab;
-    var lw = document.getElementById('vnt2-list-wrap');
-    var ew = document.getElementById('vnt2-edit-wrap');
-    if (lw) lw.style.display = '';
-    if (ew) { ew.style.display = 'none'; ew.innerHTML = ''; }
-}
-
-function showEdit() {
-    document.getElementById('vnt2-list-wrap').style.display = 'none';
-    document.getElementById('vnt2-edit-wrap').style.display = '';
 }
 
 function startStatusTimer(self) {
@@ -155,33 +160,28 @@ function refreshStatus(self) {
 function rebuildTable(self) {
     var wrap = document.getElementById('vnt2-table-wrap');
     if (!wrap) return;
-    var tableWrap = wrap.querySelector('.vnt2-table-wrap');
+    var tableWrap  = wrap.querySelector('.vnt2-table-wrap');
     var scrollLeft = tableWrap ? tableWrap.scrollLeft : 0;
     wrap.innerHTML = '';
     wrap.appendChild(buildTable(self));
     var newTableWrap = wrap.querySelector('.vnt2-table-wrap');
-    if (newTableWrap && scrollLeft > 0) {
-        newTableWrap.scrollLeft = scrollLeft;
-    }
+    if (newTableWrap && scrollLeft > 0) newTableWrap.scrollLeft = scrollLeft;
 }
 
 function buildTable(self) {
     var configs = self._configs[_tab] || [];
     if (!configs.length)
-        return E('p', { 'class':'vnt2-empty' },
+        return E('p', {'class':'vnt2-empty'},
             _('No %s configurations yet. Click "New Config" to add one.').format(TABS[_tab]));
     var thStyle = 'padding:8px 12px;text-align:center;white-space:nowrap;';
-    var heads   = [_('Enabled'), _('Name'), _('Start Method'), _('Status'), _('Actions')];
-    return E('div', { 'class':'vnt2-table-wrap', 'style':'width:100%;max-width:100%;box-sizing:border-box;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #ddd;border-radius:8px;' },
-        E('table', {
-            'class': 'vnt2-table',
-            'style': [
-                'width:100%', 'min-width:480px', 'border-collapse:collapse',
-                'border-spacing:0', 'box-sizing:border-box'
-            ].join(';')
-        }, [
+    var heads   = [_('Enabled'),_('Name'),_('Start Method'),_('Status'),_('Actions')];
+    return E('div', {'class':'vnt2-table-wrap','style':
+            'width:100%;max-width:100%;box-sizing:border-box;display:block;overflow-x:auto;'+
+            '-webkit-overflow-scrolling:touch;border:1px solid #ddd;border-radius:8px;'},
+        E('table', {'class':'vnt2-table','style':
+                'width:100%;min-width:480px;border-collapse:collapse;border-spacing:0;box-sizing:border-box;'}, [
             E('thead', {}, E('tr', {},
-                heads.map(function(h) { return E('th', { 'style':thStyle }, h); })
+                heads.map(function(h) { return E('th', {'style':thStyle}, h); })
             )),
             E('tbody', {}, configs.map(function(cfg) { return buildRow(self, cfg); }))
         ])
@@ -193,10 +193,9 @@ function buildRow(self, cfg) {
     var name    = cfg.name;
     var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;white-space:nowrap;';
     var state   = ensureState(tab, name);
-    var running = !!(self._status && self._status[name]);
 
-    var cb = E('input', { 'type':'checkbox', 'style':'width:16px;height:16px;cursor:pointer;' });
-    if (state.enabled) cb.setAttribute('checked', 'checked');
+    var cb = E('input', {'type':'checkbox','style':'width:16px;height:16px;cursor:pointer;'});
+    if (state.enabled) cb.setAttribute('checked','checked');
     cb.addEventListener('change', function() {
         _listState[tab][name].enabled = cb.checked;
         var cell = cb.closest('tr').querySelector('.vnt2-status-cell');
@@ -208,27 +207,21 @@ function buildRow(self, cfg) {
         }
     });
 
-    var btnEdit = E('button', {
-        'class': 'btn cbi-button-edit',
-        'style': 'margin-right:6px;',
-        'click': function() { openEditor(self, name, false); }
-    }, _('Edit'));
-
-    var btnDel = E('button', {
-        'class': 'btn cbi-button-negative',
-        'click': function() { deleteConfig(self, name); }
-    }, _('Delete'));
-
-    var statusCell = E('td', { 'class':'vnt2-status-cell', 'style':tdStyle },
+    var statusCell = E('td', {'class':'vnt2-status-cell','style':tdStyle},
         self._ui.statusBadge(state.enabled ? (self._status && self._status[name]) : null));
 
-    return E('tr', { 'data-cfg-name':name }, [
-        E('td', { 'style':tdStyle + 'cursor:pointer;',
-            'click': function(ev) { if (ev.target !== cb) cb.click(); } }, cb),
-        E('td', { 'class':'vnt2-col-name', 'style':tdStyle }, name),
-        E('td', { 'style':tdStyle }, buildMethodSelect(self, tab, name)),
+    return E('tr', {'data-cfg-name':name}, [
+        E('td', {'style':tdStyle+'cursor:pointer;',
+            'click':function(ev) { if (ev.target !== cb) cb.click(); }}, cb),
+        E('td', {'class':'vnt2-col-name','style':tdStyle}, name),
+        E('td', {'style':tdStyle}, buildMethodSelect(self, tab, name)),
         statusCell,
-        E('td', { 'style':tdStyle }, [btnEdit, btnDel])
+        E('td', {'style':tdStyle}, [
+            E('button', {'class':'btn cbi-button-edit','style':'margin-right:6px;',
+                'click':function() { openEditor(self, name, false); }}, _('Edit')),
+            E('button', {'class':'btn cbi-button-negative',
+                'click':function() { deleteConfig(self, name); }}, _('Delete'))
+        ])
     ]);
 }
 
@@ -239,29 +232,25 @@ function buildMethodSelect(self, tab, name) {
         state.start_method = (tab === 'vnt' && webReady) ? 'vnt2_web' : defaultMethod(tab);
         state._methodSet   = true;
     }
-    var sel = E('select', { 'class':'cbi-input-select', 'style':'width:auto;' },
+    var sel = E('select', {'class':'cbi-input-select','style':'width:auto;'},
         START_METHODS[tab].map(function(m) {
-            var attrs = { 'value':m };
+            var attrs = {'value':m};
             if (m === state.start_method)      attrs['selected'] = 'selected';
             if (m === 'vnt2_web' && !webReady) attrs['disabled'] = 'disabled';
             return E('option', attrs, m);
         })
     );
-    sel.addEventListener('change', function() {
-        _listState[tab][name].start_method = sel.value;
-    });
-    sel.addEventListener('focus', function() { stopStatusTimer(); });
-    sel.addEventListener('blur',  function() { startStatusTimer(self); });
+    sel.addEventListener('change', function() { _listState[tab][name].start_method = sel.value; });
+    sel.addEventListener('focus',  function() { stopStatusTimer(); });
+    sel.addEventListener('blur',   function() { startStatusTimer(self); });
     return sel;
 }
 
 function ensureState(tab, name) {
     if (!_listState[tab][name])
         _listState[tab][name] = {
-            enabled:      false,
-            start_method: defaultMethod(tab),
-            _methodSet:   false,
-            _cfgWebAddr:  ''
+            enabled:false, start_method:defaultMethod(tab),
+            _methodSet:false, _cfgWebAddr:''
         };
     return _listState[tab][name];
 }
@@ -270,17 +259,17 @@ function openEditor(self, name, isNew) {
     var ew = document.getElementById('vnt2-edit-wrap');
     if (!ew) return;
     ew.innerHTML = '';
-    ew.appendChild(E('div', { 'class':'vnt2-loading' }, _('Loading configuration...')));
+    ew.appendChild(E('div', {'class':'vnt2-loading'}, _('Loading configuration...')));
     location.hash = _tab + (isNew ? '&new' : '&edit=' + name);
-    showEdit();
+    toggleView(false);
     var tab = _tab;
     var p   = (isNew || !name)
         ? callReadTemplate(tab).then(function(r) {
-            return { content: (r && r.content) || '', values: {} };
+            return { content:(r && r.content)||'', values:{} };
           })
         : callReadConfig(name, tab).then(function(r) {
-            var c = (r && r.content) || '';
-            return { content: c, values: self._parser.parseValues(c) };
+            var c = (r && r.content)||'';
+            return { content:c, values:self._parser.parseValues(c) };
           });
     p.then(function(res) {
         _dirty = false;
@@ -288,7 +277,7 @@ function openEditor(self, name, isNew) {
         ew.appendChild(buildEditor(self, name, isNew, tab, res));
     }).catch(function(err) {
         self._ui.notify(_('Load failed: %s').format(String(err)), 'error');
-        showList();
+        toggleView(true);
     });
 }
 
@@ -298,79 +287,71 @@ function buildEditor(self, name, isNew, tab, res) {
     formEl.addEventListener('input',  function() { _dirty = true; });
     formEl.addEventListener('change', function() { _dirty = true; });
 
-if (isNew && tab === 'vnt') {
-    var tunInput = formEl.querySelector('[data-field-name="tun_name"]');
-    if (tunInput) {
-        tunInput._userEdited = false;
-        tunInput.addEventListener('input', function() {
-            tunInput._userEdited = true;
-        });
-    }
-}
-    var nameErr   = E('span', {
-        'style': 'color:#dc3545;font-size:12px;margin-left:8px;display:none;'
-    });
-    var nameInput = E('input', {
-        'type':        'text',
-        'class':       'cbi-input-text',
-        'style':       'width:auto;',
-        'value':       name || '',
-        'placeholder': _('Letters, numbers, underscores, hyphens')
-    });
-    nameInput.addEventListener('input', function() {
-    _dirty = true;
-    nameErr.style.display = 'none';
-    if (isNew) {
+    if (isNew && tab === 'vnt') {
         var tunInput = formEl.querySelector('[data-field-name="tun_name"]');
-        if (tunInput && !tunInput._userEdited) {
-            tunInput.value = 'vnt_' + nameInput.value.trim();
+        if (tunInput) {
+            tunInput._userEdited = false;
+            tunInput.addEventListener('input', function() { tunInput._userEdited = true; });
         }
     }
-});
+
+    var nameErr   = E('span', {
+        'style':'color:#dc3545;font-size:12px;margin-left:8px;display:none;'
+    });
+    var nameInput = E('input', {
+        'type':'text','class':'cbi-input-text','style':'width:auto;',
+        'value':name||'','placeholder':_('Letters, numbers, underscores, hyphens')
+    });
+    nameInput.addEventListener('input', function() {
+        _dirty = true;
+        nameErr.style.display = 'none';
+        if (isNew) {
+            var ti = formEl.querySelector('[data-field-name="tun_name"]');
+            if (ti && !ti._userEdited) ti.value = 'vnt_' + nameInput.value.trim();
+        }
+    });
 
     function backToList() {
         if (_dirty) {
-            self._ui.confirm(_('Discard Changes'), _('Unsaved changes exist. Are you sure to discard and return?'))
-                .then(function(ok) { if (ok) { _dirty = false; showList(); } });
+            self._ui.confirm(_('Discard Changes'),
+                _('Unsaved changes exist. Are you sure to discard and return?'))
+                .then(function(ok) { if (ok) { _dirty = false; toggleView(true); } });
         } else {
-            showList();
+            toggleView(true);
         }
     }
 
-    return E('div', { 'class':'vnt2-edit-view' }, [
-        E('div', { 'class':'vnt2-edit-header' }, [
-            E('div', { 'class':'vnt2-breadcrumb' }, [
-                E('span', { 'class':'vnt2-breadcrumb-link', 'click':backToList },
+    return E('div', {'class':'vnt2-edit-view'}, [
+        E('div', {'class':'vnt2-edit-header'}, [
+            E('div', {'class':'vnt2-breadcrumb'}, [
+                E('span', {'class':'vnt2-breadcrumb-link','click':backToList},
                     _('%s Config List').format(TABS[tab])),
-                E('span', { 'class':'vnt2-breadcrumb-sep' }, ' › '),
+                E('span', {'class':'vnt2-breadcrumb-sep'}, ' › '),
                 E('span', {}, (isNew ? _('New') : _('Edit')) + _('Configuration'))
             ]),
-            E('div', { 'style':'display:flex;align-items:center;margin-top:8px;' }, [
-                E('label', { 'style':'font-weight:bold;margin-right:6px;flex-shrink:0;' },
+            E('div', {'style':'display:flex;align-items:center;margin-top:8px;'}, [
+                E('label', {'style':'font-weight:bold;margin-right:6px;flex-shrink:0;'},
                     _('Configuration Name:')),
-                nameInput,
-                nameErr
+                nameInput, nameErr
             ])
         ]),
-        E('div', { 'class':'vnt2-edit-body' }, formEl),
-        E('div', {'class': 'vnt2-edit-footer', 'style': 'padding-top:60px;display:flex;gap:8px;' }, [
-            E('button', { 'class':'btn', 'click':backToList }, _('← Back to List')),
+        E('div', {'class':'vnt2-edit-body'}, formEl),
+        E('div', {'class':'vnt2-edit-footer','style':'padding-top:60px;display:flex;gap:8px;'}, [
+            E('button', {'class':'btn','click':backToList}, _('← Back to List')),
             E('button', {
-                'class': 'btn cbi-button-save',
+                'class':'btn cbi-button-save',
                 'click': function() {
                     var newName = nameInput.value.trim();
                     if (!newName || !/^[\w-]+$/.test(newName)) {
                         nameErr.textContent   = _('Name can only contain letters, numbers, underscores, hyphens');
                         nameErr.style.display = 'inline';
-                        nameInput.focus();
-                        return;
+                        nameInput.focus(); return;
                     }
                     if (isNew && self._configs[tab] &&
                         self._configs[tab].some(function(c) { return c.name === newName; })) {
                         nameErr.textContent   = _('Configuration name already exists');
                         nameErr.style.display = 'inline';
-                        nameInput.focus();
-                        return;
+                        nameInput.focus(); return;
                     }
                     saveConfig(self, name, newName, tab, formEl, fields, res.content);
                 }
@@ -380,9 +361,10 @@ if (isNew && tab === 'vnt') {
 }
 
 function buildForm(fields, values, parser) {
-    var form = E('div', { 'class':'vnt2-dyn-form' });
+    var form = E('div', {'class':'vnt2-dyn-form'});
     if (!fields.length) {
-        form.appendChild(E('p', { 'class':'vnt2-hint' }, _('Template fields are empty, please check the template file.')));
+        form.appendChild(E('p', {'class':'vnt2-hint'},
+            _('Template fields are empty, please check the template file.')));
         return form;
     }
     fields.forEach(function(f) { form.appendChild(buildFormRow(f, values, parser)); });
@@ -403,9 +385,9 @@ function buildFormRow(f, values, parser) {
         ? values[f.name]
         : (f.type === 'section' ? {} : f['default']);
     var isRequired  = !!(f.comment && f.comment.indexOf('必填') !== -1);
-    var nameEl      = E('div', { 'class':'vnt2-field-name' });
+    var nameEl      = E('div', {'class':'vnt2-field-name'});
     nameEl.appendChild(document.createTextNode(f.name));
-    if (isRequired) nameEl.appendChild(E('span', { 'class':'vnt2-required-star' }, ' *'));
+    if (isRequired) nameEl.appendChild(E('span', {'class':'vnt2-required-star'}, ' *'));
     var rawComment  = f.comment || '';
     var commentText = parser ? parser._extractI18nComment(rawComment) : rawComment;
     commentText = commentText
@@ -413,23 +395,23 @@ function buildFormRow(f, values, parser) {
         .replace(/示例[：:]\s*\S+/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-    return E('div', { 'class':'vnt2-field-row' }, [
-        E('div', { 'class':'vnt2-field-label' }, [
+    return E('div', {'class':'vnt2-field-row'}, [
+        E('div', {'class':'vnt2-field-label'}, [
             nameEl,
             commentText
-                ? E('div', { 'class':'vnt2-field-desc' }, commentText)
+                ? E('div', {'class':'vnt2-field-desc'}, commentText)
                 : E('span', {})
         ]),
-        E('div', { 'class':'vnt2-field-input' }, buildInput(f, val, isRequired))
+        E('div', {'class':'vnt2-field-input'}, buildInput(f, val, isRequired))
     ]);
 }
 
 var INPUT_BUILDERS = {
-    bool:    function(f, v)    { return buildBool(f, v); },
-    select:  function(f, v)    { return buildSelect(f, v); },
-    array:   function(f, v, r) { return buildArray(f, v, r); },
-    int:     function(f, v)    { return buildInt(f, v); },
-    section: function(f, v)    { return buildSection(f, v); },
+    bool:    buildBool,
+    select:  buildSelect,
+    array:   buildArray,
+    int:     buildInt,
+    section: buildSection,
 };
 
 function buildInput(f, val, isRequired) {
@@ -438,16 +420,16 @@ function buildInput(f, val, isRequired) {
 
 function buildBool(f, val) {
     var checked = (val === 'true' || val === true);
-    var span    = E('span', { 'class':'vnt2-bool-label' }, checked ? _('Enabled') : _('Disabled'));
+    var span    = E('span', {'class':'vnt2-bool-label'}, checked ? _('Enabled') : _('Disabled'));
     var cb      = E('input', {
-        'type': 'checkbox', 'class': 'vnt2-checkbox',
-        'data-field-name': f.name, 'data-field-type': 'bool'
+        'type':'checkbox','class':'vnt2-checkbox',
+        'data-field-name':f.name,'data-field-type':'bool'
     });
-    if (checked) cb.setAttribute('checked', 'checked');
+    if (checked) cb.setAttribute('checked','checked');
     cb.addEventListener('change', function() {
         span.textContent = cb.checked ? _('Enabled') : _('Disabled');
     });
-    return E('label', { 'class':'vnt2-bool-wrap' }, [cb, span]);
+    return E('label', {'class':'vnt2-bool-wrap'}, [cb, span]);
 }
 
 function buildSelect(f, val) {
@@ -464,88 +446,93 @@ function buildSelect(f, val) {
     var parsed = opts.map(function(o) {
         var i = o.indexOf('=');
         return i !== -1
-            ? { value: o.substring(0, i).trim(),
-                label: o.substring(0, i).trim() + ' — ' + o.substring(i + 1).trim() }
-            : { value: o, label: o };
+            ? {value:o.substring(0,i).trim(),
+               label:o.substring(0,i).trim()+' — '+o.substring(i+1).trim()}
+            : {value:o, label:o};
     });
     var options = [];
     if (!parsed.some(function(p) { return p.value === val; }) || val === '' || val == null)
-        options.push(E('option', { 'value':'' }, _('— Please select —')));
+        options.push(E('option', {'value':''}, _('— Please select —')));
     parsed.forEach(function(p) {
-        var a = { 'value':p.value };
+        var a = {'value':p.value};
         if (p.value === val) a['selected'] = 'selected';
         options.push(E('option', a, p.label));
     });
     return E('select', {
-        'class': 'vnt2-input vnt2-select cbi-input-select',
-        'data-field-name': f.name, 'data-field-type': 'select'
+        'class':'vnt2-input vnt2-select cbi-input-select',
+        'data-field-name':f.name,'data-field-type':'select'
     }, options);
 }
 
-function buildText(f, val, isRequired) {
+function buildText(f, val) {
     return E('input', {
-        'type': 'text', 'class': 'vnt2-input',
-        'data-field-name': f.name, 'data-field-type': 'string',
-        'value':       val != null ? String(val) : '',
-        'placeholder': getPlaceholder(f)
+        'type':'text','class':'vnt2-input',
+        'data-field-name':f.name,'data-field-type':'string',
+        'value':val != null ? String(val) : '',
+        'placeholder':getPlaceholder(f)
     });
 }
 
 function buildInt(f, val) {
     return E('input', {
-        'type': 'number', 'class': 'vnt2-input vnt2-input-number',
-        'data-field-name': f.name, 'data-field-type': 'int',
-        'value':       val != null ? String(val) : '0',
-        'placeholder': getPlaceholder(f)
+        'type':'number','class':'vnt2-input vnt2-input-number',
+        'data-field-name':f.name,'data-field-type':'int',
+        'value':val != null ? String(val) : '0',
+        'placeholder':getPlaceholder(f)
     });
 }
 
 function buildListField(f, items, cls) {
+    var pfx       = 'vnt2-' + cls;
+    var clsField  = pfx + '-field';
+    var clsItem   = pfx + '-item';
+    var clsRow    = pfx + '-row';
+    var clsBtnAdd = 'btn ' + pfx + '-btn-add';
+    var clsBtnDel = 'btn ' + pfx + '-btn-del';
+
     var container = E('div', {
-        'class':           'vnt2-' + cls + '-field',
+        'class':           clsField,
         'data-field-name': f.name,
         'data-field-type': cls
     });
 
     function addRow(v) {
         var input = E('input', {
-            'type':        'text',
-            'class':       'vnt2-input vnt2-' + cls + '-item',
-            'value':       v || '',
-            'placeholder': getPlaceholder(f)
+            'type':'text','class':'vnt2-input ' + clsItem,
+            'value':v||'','placeholder':getPlaceholder(f)
         });
         var btnAdd = E('button', {
-            'type': 'button', 'class': 'btn vnt2-array-btn-add', 'title': _('Add a row'),
-            'click': function(ev) {
+            'type':'button','class':clsBtnAdd,'title':_('Add a row'),
+            'click':function(ev) {
                 ev.preventDefault();
                 var nr = addRow('');
                 row.nextSibling
                     ? container.insertBefore(nr, row.nextSibling)
                     : container.appendChild(nr);
-                nr.querySelector('.vnt2-' + cls + '-item').focus();
-                container.dispatchEvent(new Event('input', { bubbles:true }));
+                nr.querySelector('.' + clsItem).focus();
+                container.dispatchEvent(new Event('input', {bubbles:true}));
             }
         }, '+');
         var btnDel = E('button', {
-            'type': 'button', 'class': 'btn vnt2-array-btn-del', 'title': _('Delete this row'),
-            'click': function(ev) {
+            'type':'button','class':clsBtnDel,'title':_('Delete this row'),
+            'click':function(ev) {
                 ev.preventDefault();
-                if (container.querySelectorAll('.vnt2-' + cls + '-row').length <= 1) {
+                if (container.querySelectorAll('.' + clsRow).length <= 1) {
                     input.value = ''; input.focus();
                 } else {
                     container.removeChild(row);
                 }
-                container.dispatchEvent(new Event('input', { bubbles:true }));
+                container.dispatchEvent(new Event('input', {bubbles:true}));
             }
         }, '−');
-        var row = E('div', { 'class':'vnt2-' + cls + '-row' }, [input, btnAdd, btnDel]);
+        var row = E('div', {'class':clsRow}, [input, btnAdd, btnDel]);
         return row;
     }
     items.forEach(function(v) { container.appendChild(addRow(v)); });
     return container;
 }
 
-function buildArray(f, val, isRequired) {
+function buildArray(f, val) {
     var items = Array.isArray(val)
         ? val.filter(function(v) { return String(v).trim() !== ''; })
         : (typeof val === 'string' && val.trim()
@@ -559,12 +546,10 @@ function buildArray(f, val, isRequired) {
 
 function buildSection(f, val) {
     var items = (val && typeof val === 'object' && !Array.isArray(val))
-        ? Object.keys(val).map(function(k) {
-            return (val[k] || '').trim();
-          }).filter(Boolean)
+        ? Object.keys(val).map(function(k) { return (val[k]||'').trim(); }).filter(Boolean)
         : [];
     if (!items.length) items = [''];
-    return buildListField(f, items, 'section', '');
+    return buildListField(f, items, 'section');
 }
 
 function collectItems(el, selector) {
@@ -585,8 +570,7 @@ function collectValues(formEl) {
         if (type === 'array') {
             vals[name] = collectItems(el, '.vnt2-array-item');
         } else if (type === 'section') {
-            var obj     = {};
-            var autoIdx = 1;
+            var obj = {}, autoIdx = 1;
             collectItems(el, '.vnt2-section-item').forEach(function(line) {
                 var eqIdx = line.indexOf('=');
                 if (eqIdx > 0) {
@@ -619,8 +603,7 @@ function validate(fields, formEl) {
         if (!f.comment || f.comment.indexOf('必填') === -1) return;
         if (f.type === 'array') {
             var c = formEl.querySelector(
-                '[data-field-name="' + f.name + '"][data-field-type="array"]'
-            );
+                '[data-field-name="'+f.name+'"][data-field-type="array"]');
             if (!c) return;
             var ok = false;
             c.querySelectorAll('.vnt2-array-item').forEach(function(inp) {
@@ -632,7 +615,7 @@ function validate(fields, formEl) {
                 if (fi) fi.classList.add('vnt2-input-error');
             }
         } else {
-            var el = formEl.querySelector('[data-field-name="' + f.name + '"]');
+            var el = formEl.querySelector('[data-field-name="'+f.name+'"]');
             if (!el || el.type === 'checkbox') return;
             if (!el.value.trim()) {
                 errors.push(f.name);
@@ -647,28 +630,24 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
     loadListState(tab).then(function() {
         var errors = validate(fields, formEl);
         if (errors.length) {
-            self._ui.notify(_('The following required fields are not filled: %s').format(errors.join(', ')), 'error');
+            self._ui.notify(
+                _('The following required fields are not filled: %s').format(errors.join(', ')), 'error');
             var first = formEl.querySelector('.vnt2-input-error');
-            if (first) first.scrollIntoView({ behavior:'smooth', block:'center' });
+            if (first) first.scrollIntoView({behavior:'smooth', block:'center'});
             return;
         }
-
         var content = self._parser.serializeToToml(fields, collectValues(formEl), templateContent);
         var renamed = !!(oldName && oldName !== newName);
-
-        callSaveConfig(newName, tab, content, oldName || '').then(function(r) {
+        callSaveConfig(newName, tab, content, oldName||'').then(function(r) {
             if (!r || r.result !== 'ok') {
-                self._ui.notify(_('Save failed: %s').format((r && r.msg) || ''), 'error');
+                self._ui.notify(_('Save failed: %s').format((r && r.msg)||''), 'error');
                 return;
             }
-
             if (renamed) {
                 _listState[tab][newName] = _listState[tab][oldName] || ensureState(tab, newName);
                 delete _listState[tab][oldName];
             }
-
             _dirty = false;
-            
             if (tab === 'vnt') {
                 var webReady = self._parser.hasWebAddr(content);
                 var st       = ensureState(tab, newName);
@@ -676,28 +655,26 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
                 st.start_method = webReady ? 'vnt2_web' : 'vnt2_cli';
                 st._methodSet   = true;
             }
-
             var state = _listState[tab][newName] || ensureState(tab, newName);
             if (state.enabled) {
                 callInstanceAction(newName, 'restart').then(function(res) {
                     var ok = res && res.result === 'ok';
                     self._ui.notify(
                         ok ? _('Instance "%s" restarted successfully').format(newName)
-                           : _('Instance "%s" restart failed: %s').format(newName, (res && res.msg) || _('Unknown error')),
+                           : _('Instance "%s" restart failed: %s').format(
+                               newName, (res && res.msg) || _('Unknown error')),
                         ok ? 'success' : 'error'
                     );
                 }).catch(function(err) {
                     self._ui.notify(_('Restart error: %s').format(String(err)), 'error');
                 });
             }
-
             return Promise.all([callListConfigs(tab), refreshStatus(self)])
                 .then(function(res) {
-                    self._configs[tab] = (res[0] && Array.isArray(res[0].configs))
-                        ? res[0].configs : [];
+                    self._configs[tab] = parseConfigs(res[0]);
                     ensureState(tab, newName);
                     rebuildTable(self);
-                    showList();
+                    toggleView(true);
                     saveListState(self, true);
                 });
         }).catch(function(err) {
@@ -709,23 +686,22 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
 function deleteConfig(self, name) {
     var tab     = _tab;
     var running = !!(self._status && self._status[name]);
-    var msg = running
-        ? _('Instance "%s" is running and will be stopped on delete. Are you sure?').format(name)
-        : _('Are you sure to delete config "%s"?').format(name);
-
-    self._ui.confirm(_('Confirm Delete'), msg).then(function(ok) {
+    self._ui.confirm(_('Confirm Delete'),
+        running
+            ? _('Instance "%s" is running and will be stopped on delete. Are you sure?').format(name)
+            : _('Are you sure to delete config "%s"?').format(name)
+    ).then(function(ok) {
         if (!ok) return;
         callDeleteConfig(name, tab).then(function(r) {
             if (r && r.result === 'ok') {
                 self._ui.notify(_('Config "%s" has been deleted').format(name), 'success');
                 delete _listState[tab][name];
                 return callListConfigs(tab).then(function(res) {
-                    self._configs[tab] = (res && Array.isArray(res.configs))
-                        ? res.configs : [];
+                    self._configs[tab] = parseConfigs(res);
                     rebuildTable(self);
                 });
             }
-            self._ui.notify(_('Delete failed: %s').format((r && r.msg) || ''), 'error');
+            self._ui.notify(_('Delete failed: %s').format((r && r.msg)||''), 'error');
         });
     });
 }
@@ -755,64 +731,58 @@ return view.extend({
             vnt:  (data[2] && Array.isArray(data[2].fields)) ? data[2].fields : [],
             vnts: (data[3] && Array.isArray(data[3].fields)) ? data[3].fields : []
         };
-        self._configs          = { vnt:null, vnts:null };
-        self._configs[initTab] = (data[4] && Array.isArray(data[4].configs))
-            ? data[4].configs : [];
+        self._configs          = {vnt:null, vnts:null};
+        self._configs[initTab] = parseConfigs(data[4]);
         var parsed    = parseInstanceList(data[5] && data[5].instances);
         self._status  = parsed.status;
         self._webAddr = parsed.webAddr;
-        _listState       = { vnt:{}, vnts:{} };
-        _listStateLoaded = { vnt:false, vnts:false };
+        resetListState();
         _tab   = initTab;
         _dirty = false;
         startStatusTimer(self);
 
-        var view = E('div', { 'class':'cbi-map' }, [
+        var node = E('div', {'class':'cbi-map'}, [
             E('h2', {}, _('VNT2 Configuration')),
-            E('div', { 'class':'cbi-section' }, [
-                E('div', {
-                    'style': 'display:flex;border-bottom:2px solid #ddd;margin-bottom:16px;'
-                }, Object.keys(TABS).map(function(t) {
-                    var active = t === initTab;
-                    return E('div', {
-                        'id':    'vnt2-tab-' + t,
-                        'style': [
-                            'padding:8px 24px', 'cursor:pointer', 'font-weight:bold',
-                            'margin-bottom:-2px',
-                            'border-bottom:' + (active ? '2px solid #3498db' : '2px solid transparent'),
-                            'color:' + (active ? '#3498db' : '#666')
-                        ].join(';'),
-                        'click': function() { switchTab(self, t); }
-                    }, TABS[t] + _('Configuration'));
-                })),
-                E('div', { 'id':'vnt2-list-wrap' }, [
+            E('div', {'class':'cbi-section'}, [
+                E('div', {'style':'display:flex;border-bottom:2px solid #ddd;margin-bottom:16px;'},
+                    Object.keys(TABS).map(function(t) {
+                        var active = t === initTab;
+                        return E('div', {
+                            'id':    'vnt2-tab-' + t,
+                            'style': [
+                                'padding:8px 24px','cursor:pointer','font-weight:bold',
+                                'margin-bottom:-2px',
+                                'border-bottom:'+(active?'2px solid #3498db':'2px solid transparent'),
+                                'color:'+(active?'#3498db':'#666')
+                            ].join(';'),
+                            'click': function() { switchTab(self, t); }
+                        }, TABS[t]+_('Configuration'));
+                    })
+                ),
+                E('div', {'id':'vnt2-list-wrap'}, [
                     E('div', {
-                        'class': 'vnt2-toolbar',
-                        'style': 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;'
+                        'class':'vnt2-toolbar',
+                        'style':'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;'
                     }, [
-                        E('button', {
-                            'class': 'btn cbi-button-add',
-                            'click': function() { openEditor(self, '', true); }
+                        E('button', {'class':'btn cbi-button-add',
+                            'click':function() { openEditor(self, '', true); }
                         }, _('+ New Config')),
-                        E('button', {
-                            'class': 'btn cbi-button-save',
-                            'click': function() { saveListState(self); }
+                        E('button', {'class':'btn cbi-button-save',
+                            'click':function() { saveListState(self); }
                         }, _('Save & Apply'))
                     ]),
-                    E('div', { 'id':'vnt2-table-wrap' },
-                        E('p', { 'class':'vnt2-loading' }, _('Loading...'))
-                    )
+                    E('div', {'id':'vnt2-table-wrap'},
+                        E('p', {'class':'vnt2-loading'}, _('Loading...')))
                 ]),
-                E('div', { 'id':'vnt2-edit-wrap', 'style':'display:none;' })
+                E('div', {'id':'vnt2-edit-wrap','style':'display:none;'})
             ])
         ]);
 
         loadListState(initTab).then(function() {
             rebuildTable(self);
-            var hash = location.hash.replace('#', '');
+            var hash = location.hash.replace('#','');
             if (hash.indexOf('&edit=') !== -1) {
-                var editName = hash.split('&edit=')[1];
-                openEditor(self, editName, false);
+                openEditor(self, hash.split('&edit=')[1], false);
             } else if (hash.indexOf('&new') !== -1) {
                 openEditor(self, '', true);
             }
@@ -823,14 +793,13 @@ return view.extend({
             if (footer) footer.style.display = 'none';
         });
 
-        return view;
+        return node;
     },
 
-    handleSaveApply: function(ev, mode) { return saveListState(this); },
-    handleSave:      function(ev)       { return L.uci.save(); },
+    handleSaveApply: function() { return saveListState(this); },
+    handleSave:      function() { return L.uci.save(); },
     handleReset:     function() {
-        _listState       = { vnt:{}, vnts:{} };
-        _listStateLoaded = { vnt:false, vnts:false };
+        resetListState();
         loadListState(_tab);
         return L.uci.load('vnt2').then(L.bind(function() {
             rebuildTable(this);

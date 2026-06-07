@@ -1,6 +1,6 @@
 # VNT2 LuCI i18n Chinese (Simplified)
 # zh-cn
-# v1.1
+# v1.2
 
 msgid ""
 msgstr ""
@@ -166,9 +166,6 @@ msgstr "未知错误"
 #: overview.js
 msgid "VNT2 Status"
 msgstr "VNT2 运行状态"
-
-msgid "Instance Status "
-msgstr "实例运行状态 "
 
 msgid "%d running"
 msgstr "%d 个运行中"
@@ -397,6 +394,90 @@ msgstr "简便高效的异地组网工具"
 
 msgid "Official Website"
 msgstr "官网"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Client"
+msgstr "客户端"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "Retrying..."
+msgstr "重试中..."
+
+msgid "Networks"
+msgstr "网络列表"
+
+msgid "Servers"
+msgstr "服务器列表"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "NAT"
+msgstr "NAT"
+
+msgid "RTT: "
+msgstr "延迟："
+
+msgid "No network data"
+msgstr "暂无网络数据"
+
+msgid "Network"
+msgstr "网络"
+
+msgid "Netmask"
+msgstr "子网掩码"
+
+msgid "Lease"
+msgstr "租期"
+
+msgid "Source"
+msgstr "来源"
+
+msgid "Online/Total"
+msgstr "在线/总数"
+
+msgid "Config"
+msgstr "配置"
+
+msgid "Manual"
+msgstr "手动"
+
+msgid "Device Register"
+msgstr "设备注册"
+
+msgid "No devices in this network"
+msgstr "该网络暂无设备"
+
+msgid "Latency"
+msgstr "延迟"
+
+msgid "Last Connect"
+msgstr "最后连接"
+
+msgid "Outbound Servers"
+msgstr "出站服务器"
+
+msgid "Inbound Servers"
+msgstr "入站服务器"
+
+msgid "No data"
+msgstr "暂无数据"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Remote"
+msgstr "中继"
 
 #: settings.js
 msgid "VNT2 Settings & Update"

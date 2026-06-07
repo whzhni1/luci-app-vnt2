@@ -1,6 +1,4 @@
 #!/usr/bin/ucode
-// /usr/libexec/rpcd/luci.vnt2
-
 'use strict';
 
 import { readfile, writefile, stat, lsdir, unlink, popen, open } from "fs";
@@ -20,30 +18,36 @@ const START_METHODS = {
 };
 
 const SETTING_DEFS = [
-    ["bin_path",        "/usr/bin"        ],
-    ["config_path",     "/etc/vnt2_config"],
-    ["arch",            "0"                ],
-    ["mirror",          "github"          ],
-    ["auto_update",     "0"               ],
-    ["update_interval", "7"               ],
-    ["upx_compressed",  "0"               ],
-    ["respawn_threshold",  "3600"],
-    ["respawn_timeout",    "5"   ],
-    ["respawn_retry",      "5"   ],
-    ["log_max_kb",      "300"             ],
-    ["fw_vnt_to_lan",   "1"               ],
-    ["fw_lan_to_vnt",   "1"               ],
-    ["fw_vnt_to_wan",   "0"               ],
-    ["fw_wan_to_vnt",   "0"               ],
-    ["fw_vnt_web",      "0"               ],
-    ["fw_vnts_web",     "0"               ],
+    ["bin_path",           "/usr/bin",        "string"],
+    ["config_path",        "/etc/vnt2_config","string"],
+    ["arch",               "0",               "string"],
+    ["mirror",             "github",          "string"],
+    ["auto_update",        "0",               "bool"  ],
+    ["update_interval",    "7",               "int"   ],
+    ["upx_compressed",     "0",               "bool"  ],
+    ["respawn_threshold",  "3600",            "int"   ],
+    ["respawn_timeout",    "5",               "int"   ],
+    ["respawn_retry",      "5",               "int"   ],
+    ["log_max_kb",         "300",             "int"   ],
+    ["fw_vnt_to_lan",      "1",               "bool"  ],
+    ["fw_lan_to_vnt",      "1",               "bool"  ],
+    ["fw_vnt_to_wan",      "0",               "bool"  ],
+    ["fw_wan_to_vnt",      "0",               "bool"  ],
+    ["fw_vnt_web",         "0",               "bool"  ],
+    ["fw_vnts_web",        "0",               "bool"  ],
 ];
 
-const WEB_API_MAP = {
+const VNT_API_MAP = {
     info:    "/api/info",
     ips:     "/api/info",
     clients: "/api/peers",
     route:   "/api/peers",
+};
+
+const VNTS_API_MAP = {
+    info:    "/api/networks",
+    clients: "/api/devices",
+    servers: "/api/peer_servers",
 };
 
 let CFG = {
@@ -67,12 +71,12 @@ function execOutput(cmd) {
     return out ?? "";
 }
 
-function safeRead(path)       { return readfile(path) ?? ""; }
+function safeRead(path)           { return readfile(path) ?? ""; }
 function writeFile(path, content) {
     let r = writefile(path, content);
     return r != null && r > 0;
 }
-function fileExists(path)     { return stat(path) != null; }
+function fileExists(path) { return stat(path) != null; }
 function isExecutable(path) {
     let s = stat(path);
     return s != null && s.perm != null && s.perm.user_exec === true;
@@ -80,6 +84,13 @@ function isExecutable(path) {
 
 function pidFile(name)        { return `${CFG.run_dir}/vnt2_${name}.pid`; }
 function confFile(name, type) { return `${CFG.config_path}/${name}.${type}`; }
+
+function updFile(p, ext) { return `${DEFAULTS.update_dir}/${p}.${ext}`; }
+
+function resetUpdateState(project) {
+    system(`mkdir -p '${DEFAULTS.update_dir}'`);
+    system(`rm -f '${updFile(project, "status")}' '${updFile(project, "log")}'`);
+}
 
 function initPaths() {
     let uci = cursor();
@@ -103,14 +114,18 @@ function getDeviceModel() {
 }
 
 function readField(file, field) {
-    let content = safeRead(file);
-    let lines   = split(content, "\n");
+    let lines = split(safeRead(file), "\n");
     for (let i = 0; i < length(lines); i++) {
         let line = trim(lines[i]);
         let m    = match(line, regexp("^" + field + "\\s*=\\s*(.+)$"));
         if (m) return replace(m[1], /^\s*["']?|["']?\s*$/g, "");
     }
     return "";
+}
+
+function normalizeAddr(webAddr) {
+    let addr = replace(webAddr, /^0\.0\.0\.0/, "127.0.0.1");
+    return substr(addr, 0, 1) === ":" ? "127.0.0.1" + addr : addr;
 }
 
 function listConfFiles(filter) {
@@ -134,16 +149,10 @@ function listConfFiles(filter) {
 }
 
 function getActualNames(type) {
-    let files  = lsdir(CFG.config_path) ?? [];
-    let suffix = "." + type;
-    let slen   = length(suffix);
-    let names  = [];
-    for (let i = 0; i < length(files); i++) {
-        let f    = files[i];
-        let flen = length(f);
-        if (flen > slen && substr(f, flen - slen) === suffix)
-            push(names, substr(f, 0, flen - slen));
-    }
+    let files = listConfFiles(type);
+    let names = [];
+    for (let i = 0; i < length(files); i++)
+        push(names, files[i].name);
     return names;
 }
 
@@ -200,19 +209,18 @@ function cmdGetCpuTicks(args) {
 }
 
 function instanceInfo(name) {
-    let type    = getType(name);
-    let running = isRunning(name);
-    let pid     = running ? readPid(name) : "";
-    let uptime  = 0;
-    let mem     = "0";
+    let type     = getType(name);
+    let running  = isRunning(name);
+    let pid      = running ? readPid(name) : "";
+    let uptime   = 0;
+    let mem      = "0";
     let web_addr = "";
 
     if (running && pid) {
-        let hz      = int(trim(execOutput("getconf CLK_TCK 2>/dev/null"))) || 100;
-        let sparts  = split(safeRead(`/proc/${pid}/stat`), " ");
-        let uptData = safeRead("/proc/uptime");
-        let startJ  = int(sparts[21]);
-        let uptSec  = int(split(trim(uptData), " ")[0]);
+        let hz     = int(trim(execOutput("getconf CLK_TCK 2>/dev/null"))) || 100;
+        let sparts = split(safeRead(`/proc/${pid}/stat`), " ");
+        let uptSec = int(split(trim(safeRead("/proc/uptime")), " ")[0]);
+        let startJ = int(sparts[21]);
         if (startJ && uptSec) {
             uptime = uptSec - int(startJ / hz);
             if (uptime < 0) uptime = 0;
@@ -236,9 +244,10 @@ function instanceAction(name, action) {
         let pid = readPid(name);
         if (pid && pidAlive(pid)) {
             system(`kill ${pid} 2>/dev/null`);
+            system(`setsid ${DEFAULTS.init_script} start >/dev/null 2>&1 &`);
             return { result: "ok" };
         }
-        action = "start"; 
+        action = "start";
     }
     if (name) {
         let type = getType(name);
@@ -256,47 +265,45 @@ function instanceAction(name, action) {
         }
         uci.set("vnt2", sid, "enabled", action === "start" ? "1" : "0");
         uci.commit("vnt2");
-        action = "start"; 
     }
-    system(`setsid ${DEFAULTS.init_script} ${action} >/dev/null 2>&1 &`);
+    system(`setsid ${DEFAULTS.init_script} ${name ? "start" : action} >/dev/null 2>&1 &`);
     return { result: "ok" };
 }
 
 function cmdGetLog(args) {
     initPaths();
-    let name    = args.name;
-    let lines   = args.lines != null ? int(args.lines) : null;
-    if (name === 'update_all') {
-        let files = ['luci-app-vnt2', 'vnt', 'vnts'];
+    let name  = args.name;
+    let lines = args.lines != null ? int(args.lines) : null;
+    if (name === "update_all") {
         let parts = [];
+        let files = ["luci-app-vnt2", "vnt", "vnts"];
         for (let i = 0; i < length(files); i++) {
-            let p = `${DEFAULTS.update_dir}/${files[i]}.log`;
-            let fp = open(p, 'r');
+            let fp = open(updFile(files[i], "log"), "r");
             if (fp) {
-                let c = trim(fp.read('all'));
+                let c = trim(fp.read("all"));
                 fp.close();
                 if (c) push(parts, c);
             }
         }
-        return { content: join('\n', parts) };
+        return { content: join("\n", parts) };
     }
-    let logFile = `${CFG.log_dir}/${name}.log`;
-    if (!fileExists(logFile)) return { content: "" };
+    let logPath = `${CFG.log_dir}/${name}.log`;
+    if (!fileExists(logPath)) return { content: "" };
     let cmd = (lines != null && lines > 0)
-        ? `tail -n ${lines} '${logFile}' 2>/dev/null`
-        : `cat '${logFile}' 2>/dev/null`;
+        ? `tail -n ${lines} '${logPath}' 2>/dev/null`
+        : `cat '${logPath}' 2>/dev/null`;
     return { content: trim(execOutput(cmd)) };
 }
 
 function cmdClearLog(args) {
     initPaths();
-    if (args.name === 'update_all') {
+    if (args.name === "update_all") {
         execOutput(`rm -rf '${DEFAULTS.update_dir}' 2>/dev/null`);
-        return { result: 'ok' };
+        return { result: "ok" };
     }
-    let logFile = `${CFG.log_dir}/${args.name}.log`;
-    if (fileExists(logFile)) {
-        let f = open(logFile, "w");
+    let logPath = `${CFG.log_dir}/${args.name}.log`;
+    if (fileExists(logPath)) {
+        let f = open(logPath, "w");
         if (f) f.close();
     }
     return { result: "ok" };
@@ -304,14 +311,14 @@ function cmdClearLog(args) {
 
 function cmdListInstances() {
     initPaths();
-    let files     = listConfFiles("all");
+    let allFiles  = listConfFiles("all");
     let seen      = {};
     let instances = [];
-    for (let i = 0; i < length(files); i++) {
-        let name = files[i].name;
-        if (seen[name]) continue;
-        seen[name] = true;
-        push(instances, instanceInfo(name));
+    for (let i = 0; i < length(allFiles); i++) {
+        let f = allFiles[i];
+        if (seen[f.name]) continue;
+        seen[f.name] = true;
+        push(instances, instanceInfo(f.name));
     }
     return { instances };
 }
@@ -351,8 +358,7 @@ function parseDefaultValue(rawVal, ftype) {
         let items = [];
         let parts = split(inner, ",");
         for (let i = 0; i < length(parts); i++) {
-            let v = trim(parts[i]);
-            v = replace(v, /^["']|["']$/g, "");
+            let v = trim(replace(trim(parts[i]), /^["']|["']$/g, ""));
             if (v) push(items, v);
         }
         return items;
@@ -400,8 +406,7 @@ function parseTemplateFields(content) {
         let optM    = match(fullComment, /选项[：:]\s*([^\n]+)/);
         if (optM) {
             let optStr = trim(optM[1]);
-            let raw    = index(optStr, ",") >= 0
-                ? split(optStr, ",") : split(optStr, " ");
+            let raw    = index(optStr, ",") >= 0 ? split(optStr, ",") : split(optStr, " ");
             for (let oi = 0; oi < length(raw); oi++) {
                 let v = trim(raw[oi]);
                 if (v) push(options, v);
@@ -437,10 +442,8 @@ function cmdSaveConfig(args) {
     let oldName = (args.old_name && args.old_name !== "") ? args.old_name : args.name;
     let name    = args.name;
     let type    = args.type;
-
     if (!writeFile(confFile(name, type), args.content))
         return { result: "error", msg: "Write failed" };
-
     if (oldName !== name) {
         let uci = cursor();
         uci.load("vnt2");
@@ -456,7 +459,6 @@ function cmdSaveConfig(args) {
     } else {
         if (isRunning(name)) instanceAction(name, "restart");
     }
-
     return { result: "ok" };
 }
 
@@ -479,18 +481,68 @@ function cmdDeleteConfig(args) {
 }
 
 function fetchWebApi(webAddr, path) {
-    let addr = (substr(webAddr, 0, 1) === ':')
-        ? '127.0.0.1' + webAddr : webAddr;
-    let raw = execOutput(
+    let addr = normalizeAddr(webAddr);
+    let raw  = execOutput(
         `curl -fsSL --connect-timeout 3 --max-time 5 'http://${addr}${path}' 2>/dev/null`
     );
     return raw ? json(raw) : null;
 }
 
+function vntsLogin(webAddr, name) {
+    let conf = confFile(name, "vnts");
+    let user = readField(conf, "username") || "admin";
+    let pass = readField(conf, "password") || "";
+    let addr = normalizeAddr(webAddr);
+    let body = sprintf('{"username":%J,"password":%J}', user, pass);
+    let raw  = execOutput(sprintf(
+        "curl -fsSL --connect-timeout 5 --max-time 10 " +
+        "-X POST -H 'Content-Type: application/json' " +
+        "-d '%s' 'http://%s/api/login' 2>/dev/null",
+        body, addr
+    ));
+    if (!raw) return null;
+    let r = json(raw);
+    if (!r || r.code !== 200 || !r.data || !r.data.token) return null;
+    return r.data.token;
+}
+
+function fetchVntsApi(webAddr, path, token, params) {
+    let addr = normalizeAddr(webAddr);
+    let url  = params
+        ? sprintf("http://%s%s?%s", addr, path, params)
+        : sprintf("http://%s%s",    addr, path);
+    let raw  = execOutput(sprintf(
+        "curl -fsSL --connect-timeout 5 --max-time 10 " +
+        "-H 'Authorization: Bearer %s' '%s' 2>/dev/null",
+        token, url
+    ));
+    return raw ? json(raw) : null;
+}
+
+function fetchVntsData(webAddr, name, cmd, networkCode) {
+    let api = VNTS_API_MAP[cmd];
+    if (!api) return { error: "Unknown command", cmd };
+    let token = vntsLogin(webAddr, name);
+    if (!token) return { error: "Login failed" };
+    let params = null;
+    if (cmd === "clients") {
+        let code = networkCode || null;
+        if (!code) {
+            let nr = fetchVntsApi(webAddr, "/api/networks", token, null);
+            if (!nr || nr.code !== 200 || !nr.data || !length(nr.data))
+                return { error: "No networks found" };
+            code = nr.data[0].network_code;
+        }
+        params = "code=" + code;
+    }
+    let r = fetchVntsApi(webAddr, api, token, params);
+    if (!r || r.code !== 200) return { error: "Fetch failed" };
+    return { data: r.data };
+}
 
 function fetchWebData(webAddr, cmd) {
-    let api = WEB_API_MAP[cmd];
-    if (!api) return { error: "Unknown command", cmd: cmd };
+    let api = VNT_API_MAP[cmd];
+    if (!api) return { error: "Unknown command", cmd };
     let r = fetchWebApi(webAddr, api);
     if (!r || r.code !== 0) return { error: "Fetch failed" };
     return { data: r.data };
@@ -498,9 +550,15 @@ function fetchWebData(webAddr, cmd) {
 
 function cmdGetCtrlInfo(args) {
     initPaths();
-    let name = args.name;
-    let cmd  = args.cmd;
-    let type = getType(name);
+    let name        = args.name;
+    let cmd         = args.cmd;
+    let networkCode = args.network_code || null;
+    let type        = getType(name);
+    if (type === "vnts") {
+        let webAddr = readField(confFile(name, "vnts"), "web_bind");
+        if (!webAddr) return { error: "web_bind not configured" };
+        return fetchVntsData(webAddr, name, cmd, networkCode);
+    }
     if (type !== "vnt") return { error: "Not a client instance" };
     let conf   = confFile(name, "vnt");
     let method = getStartMethod(name, "vnt");
@@ -556,14 +614,14 @@ function cmdGetSettings() {
 function cmdSaveSettings(args) {
     let uci = cursor();
     uci.load("vnt2");
-    let stringKeys = { bin_path:1, config_path:1, arch:1, mirror:1 };
-    let intKeys    = { update_interval:1, respawn_threshold:1, respawn_timeout:1, respawn_retry:1, log_max_kb:1 };
     for (let i = 0; i < length(SETTING_DEFS); i++) {
-        let k = SETTING_DEFS[i][0];
-        if (stringKeys[k]) {
+        let k   = SETTING_DEFS[i][0];
+        let def = SETTING_DEFS[i][1];
+        let t   = SETTING_DEFS[i][2];
+        if (t === "string") {
             uci.set("vnt2", "global", k, args[k] ?? "");
-        } else if (intKeys[k]) {
-            uci.set("vnt2", "global", k, `${int(args[k]) || int(SETTING_DEFS[i][1])}`);
+        } else if (t === "int") {
+            uci.set("vnt2", "global", k, `${int(args[k]) || int(def)}`);
         } else {
             uci.set("vnt2", "global", k, args[k] === "1" ? "1" : "0");
         }
@@ -592,9 +650,7 @@ function cmdGetEnabled(args) {
     for (let i = 0; i < length(names); i++) {
         let name     = names[i];
         let s        = uciState[name] ?? {
-            enabled:      false,
-            start_method: START_METHODS[type],
-            method_set:   false,
+            enabled: false, start_method: START_METHODS[type], method_set: false
         };
         let web_addr = (type === "vnt")
             ? readField(confFile(name, type), "web_addr") : "";
@@ -603,7 +659,7 @@ function cmdGetEnabled(args) {
             enabled:      s.enabled,
             start_method: s.start_method,
             method_set:   s.method_set,
-            web_addr,
+            web_addr
         });
     }
     return { configs };
@@ -629,11 +685,10 @@ function cmdSetEnabled(args) {
         if (!item.name || !actualSet[item.name]) continue;
         let sid = `cfg_${cfgType}_${idx}`;
         uci.set("vnt2", sid, cfgType);
-        uci.set("vnt2", sid, "name",        item.name);
-        uci.set("vnt2", sid, "enabled",     item.enabled ? "1" : "0");
-        uci.set("vnt2", sid, "start_method",
-                item.start_method || START_METHODS[cfgType]);
-        uci.set("vnt2", sid, "method_set",  "1");
+        uci.set("vnt2", sid, "name",         item.name);
+        uci.set("vnt2", sid, "enabled",      item.enabled ? "1" : "0");
+        uci.set("vnt2", sid, "start_method", item.start_method || START_METHODS[cfgType]);
+        uci.set("vnt2", sid, "method_set",   "1");
         idx++;
     }
     uci.commit("vnt2");
@@ -641,58 +696,52 @@ function cmdSetEnabled(args) {
     return { result: "ok" };
 }
 
-function updStatusFile(p) { return `${DEFAULTS.update_dir}/${p}.status`;    }
-function updLogFile(p)    { return `${DEFAULTS.update_dir}/${p}.log`;       }
-function updSlimFile(p)   { return `${DEFAULTS.update_dir}/${p}.slim.json`; }
+function statusPrefix(s, prefix) {
+    return substr(s, 0, length(prefix)) === prefix
+        ? substr(s, length(prefix)) : null;
+}
 
 function cmdGetUpstreamVersion(args) {
     let project = args.project;
-    let mirror  = getMirror(args);
-    system(`mkdir -p '${DEFAULTS.update_dir}'`);
-    system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
+    resetUpdateState(project);
     system(
-        `setsid '${DEFAULTS.update_script}' check '${project}' '${mirror}'` +
-        ` >> '${updLogFile(project)}' 2>&1 &`
+        `setsid '${DEFAULTS.update_script}' check '${project}' '${getMirror(args)}'` +
+        ` >> '${updFile(project, "log")}' 2>&1 &`
     );
     return { result: "ok" };
 }
 
 function cmdDoUpdate(args) {
-    let project  = args.project;
-    let tag      = args.tag;
-    let filename = args.filename;
-    let upx      = args.upx ? "1" : "0";
-    system(`mkdir -p '${DEFAULTS.update_dir}'`);
-    system(`rm -f '${updStatusFile(project)}' '${updLogFile(project)}'`);
+    let project = args.project;
+    resetUpdateState(project);
     system(
         `setsid '${DEFAULTS.update_script}' download` +
-        ` '${project}' '${tag}' '${filename}' '${upx}'` +
-        ` >> '${updLogFile(project)}' 2>&1 &`
+        ` '${project}' '${args.tag}' '${args.filename}' '${args.upx ? "1" : "0"}'` +
+        ` >> '${updFile(project, "log")}' 2>&1 &`
     );
     return { result: "ok" };
 }
 
 function cmdGetUpdateStatus(args) {
     let project = args.project;
-    let statusF = updStatusFile(project);
-    let logF    = updLogFile(project);
-    let slimF   = updSlimFile(project);
+    let statusF = updFile(project, "status");
+    let logF    = updFile(project, "log");
+    let slimF   = updFile(project, "slim.json");
     if (!fileExists(statusF)) return { status: "idle" };
     let status  = trim(safeRead(statusF));
     let logTail = fileExists(logF)
         ? trim(execOutput(`tail -n 30 '${logF}' 2>/dev/null`)) : "";
-    if (status === "checking")
-        return { status: "checking", log: logTail };
-    if (substr(status, 0, 6) === "ready:") {
-        let releases = fileExists(slimF) ? json(safeRead(slimF)) : null;
-        return { status: "ready", count: substr(status, 6), releases, log: logTail };
-    }
-    if (status === "downloading" || status === "installing")
+    if (status === "checking" || status === "downloading" || status === "installing")
         return { status, log: logTail };
-    if (substr(status, 0, 5) === "done:")
-        return { status: "done", installed: substr(status, 5), log: logTail };
-    if (substr(status, 0, 6) === "error:")
-        return { status: "error", msg: substr(status, 6), log: logTail };
+    let readyVal = statusPrefix(status, "ready:");
+    if (readyVal !== null) {
+        let releases = fileExists(slimF) ? json(safeRead(slimF)) : null;
+        return { status: "ready", count: readyVal, releases, log: logTail };
+    }
+    let doneVal  = statusPrefix(status, "done:");
+    if (doneVal  !== null) return { status: "done",  installed: doneVal,  log: logTail };
+    let errorVal = statusPrefix(status, "error:");
+    if (errorVal !== null) return { status: "error", msg: errorVal,        log: logTail };
     return { status: "idle" };
 }
 
@@ -704,7 +753,7 @@ const METHODS = {
     get_template_fields:  cmdGetTemplateFields,
     save_config:          cmdSaveConfig,
     delete_config:        cmdDeleteConfig,
-    instance_action: (a) => instanceAction(a.name, a.action),
+    instance_action:      (a) => instanceAction(a.name, a.action),
     get_instance_status:  (a) => { initPaths(); return instanceInfo(a.name); },
     get_ctrl_info:        cmdGetCtrlInfo,
     get_log:              cmdGetLog,
@@ -729,34 +778,22 @@ const SIGNATURES = {
     get_template_fields:  { type: "String" },
     save_config:          { name: "String", type: "String", content: "String", old_name: "String" },
     delete_config:        { name: "String", type: "String" },
-    start_instance:       { name: "String" },
-    stop_instance:        { name: "String" },
-    restart_instance:     { name: "String" },
     get_instance_status:  { name: "String" },
-    get_ctrl_info:        { name: "String", cmd: "String" },
+    instance_action:      { name: "String", action: "String" },
+    get_ctrl_info:        { name: "String", cmd: "String", network_code: "String" },
     get_log:              { name: "String", lines: "Integer" },
     clear_log:            { name: "String" },
     get_system_info:      {},
     check_binaries:       {},
     get_settings:         {},
     save_settings: {
-        bin_path:        "String",
-        config_path:     "String",
-        arch:            "String",
-        mirror:          "String",
-        auto_update:     "String",
-        update_interval: "Integer",
-        upx_compressed:  "String",
-        respawn_threshold:    "Integer",
-        respawn_timeout:      "Integer",
-        respawn_retry:   "Integer",
-        log_max_kb:      "Integer",
-        fw_vnt_to_lan:   "String",
-        fw_lan_to_vnt:   "String",
-        fw_vnt_to_wan:   "String",
-        fw_wan_to_vnt:   "String",
-        fw_vnt_web:      "String",
-        fw_vnts_web:     "String",
+        bin_path: "String", config_path: "String", arch: "String", mirror: "String",
+        auto_update: "String", update_interval: "Integer", upx_compressed: "String",
+        respawn_threshold: "Integer", respawn_timeout: "Integer", respawn_retry: "Integer",
+        log_max_kb: "Integer",
+        fw_vnt_to_lan: "String", fw_lan_to_vnt: "String",
+        fw_vnt_to_wan: "String", fw_wan_to_vnt: "String",
+        fw_vnt_web: "String", fw_vnts_web: "String",
     },
     get_upstream_version: { project: "String", mirror: "String" },
     do_update:            { project: "String", tag: "String", filename: "String", upx: "String" },
@@ -764,7 +801,6 @@ const SIGNATURES = {
     get_enabled:          { type: "String" },
     set_enabled:          { type: "String", configs: "String" },
     get_cpu_ticks:        { name: "String" },
-    instance_action: { name: "String", action: "String" },
 };
 
 let argv = ARGV;
@@ -774,8 +810,7 @@ switch (argv[0]) {
         break;
     case "call": {
         let method = argv[1];
-        let raw    = readfile("/dev/stdin") ?? "{}";
-        let input  = json(raw) ?? {};
+        let input  = json(readfile("/dev/stdin") ?? "{}") ?? {};
         let fn     = METHODS[method];
         if (!fn) {
             print(sprintf("%J", { error: "Unknown method" }), "\n");

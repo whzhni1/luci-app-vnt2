@@ -110,7 +110,6 @@ return view.extend({
     },
 
     handleSave: function() {
-        var self = this;
         return callSaveSettings.apply(null, this._getUciSettings());
     },
 
@@ -340,15 +339,13 @@ return view.extend({
             ),
             E('h3', {}, _('Check Update')),
             self._buildUpdateBlock('luci-app-vnt2', _('LuCI Plugin (luci-app-vnt2)')),
-            E('div', { 'style': 'margin:12px 0;border-top:1px solid #eee;' }),
             self._buildUpdateBlock('vnt',  _('VNT Client (vnt2_cli / vnt2_web / vnt2_ctrl)')),
-            E('div', { 'style': 'margin:12px 0;border-top:1px solid #eee;' }),
             self._buildUpdateBlock('vnts', _('VNTS Server (vnts2)'))
         ]);
     },
 
     _buildVersionRows: function(sys, bins) {
-        var tdStyle = 'padding:8px 12px;text-align:center;vertical-    align:middle;';
+        var tdStyle = 'padding:8px 12px;text-align:center;vertical-align:middle;';
         return COMPONENTS.map(function(comp) {
             var installed = !!bins[comp.binKey];
             return E('tr', { 'data-comp': comp.name }, [
@@ -550,6 +547,9 @@ return view.extend({
     },
 
     _pollStatus: function(project, bid, phase) {
+        var tr = function(s) {
+            return (self._i18n && self._i18n.translate) ? self._i18n.translate(s||'') : (s||'');
+        };
         var self     = this;
         var checkBtn = this._el(bid + '-check-btn');
         var btn      = this._el(bid + '-btn');
@@ -594,8 +594,7 @@ return view.extend({
                 }
                 if (s.status === 'done') {
                     if (btn) btn.disabled = false;
-                    var installed = (self._i18n && self._i18n.translate)
-                        ? self._i18n.translate(s.installed || '') : (s.installed || '');
+                    var installed = tr(s.installed) || '';
                     self._setStatus(bid, _('✓ Installation complete: %s').format(installed), '#28a745');
                     if (s.log) self._showLog(bid, s.log);
                     self._refreshVersionTable();
@@ -604,8 +603,7 @@ return view.extend({
                 if (s.status === 'error') {
                     if (checkBtn) checkBtn.disabled = false;
                     if (btn)      btn.disabled      = false;
-                    var msg = (self._i18n && self._i18n.translate)
-                        ? self._i18n.translate(s.msg || '') : (s.msg || _('Failed'));
+                    var msg       = tr(s.msg)       || _('Failed');
                     self._setStatus(bid, _('✗ %s').format(msg || _('Failed')), '#dc3545');
                     if (s.log) self._showLog(bid, s.log);
                     self._show(bid + '-mirror-row', true);

@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.6
+# VNT2 更新脚本 v1.7
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -16,7 +16,7 @@ tmp_file()    { echo "$CACHE_DIR/$2";           }
 
 log() {
     local f="$(log_file "$1")"; shift
-    echo "[$(date '+%H:%M:%S')] $*" >> "$f"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$f"
 }
 
 set_status() { echo "$2" > "$(status_file "$1")"; }

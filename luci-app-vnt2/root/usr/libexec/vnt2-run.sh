@@ -1,11 +1,10 @@
 #!/bin/sh
-# /usr/libexec/vnt2-run.sh  VNT2 wrapper v1.4
+# /usr/libexec/vnt2-run.sh  VNT2 wrapper v1.5
 
 NAME="$1"
 LOG_FILE="$2"
 shift 2
 
-LOG_MAX=$(( $(uci get vnt2.global.log_max_kb 2>/dev/null || echo 300) * 1024 ))
 CHECK_INTERVAL=100
 
 log() {
@@ -14,14 +13,19 @@ log() {
 
 rotate_log() {
     [ -f "$LOG_FILE" ] || return
+    local log_max_kb log_max
+    log_max_kb=$(uci get vnt2.global.log_max_kb 2>/dev/null || echo 300)
+    log_max=$(( log_max_kb * 1024 ))
+    
     local size
     size=$(wc -c < "$LOG_FILE" 2>/dev/null)
-    [ "${size:-0}" -ge "$LOG_MAX" ] || return
+    [ "${size:-0}" -ge "$log_max" ] || return
+    
     local tmp
     tmp=$(mktemp) || return
-    tail -c $((LOG_MAX / 2)) "$LOG_FILE" > "$tmp" \
+    tail -c $((log_max / 2)) "$LOG_FILE" > "$tmp" \
         && mv "$tmp" "$LOG_FILE" \
-        && log "Log truncated (exceeded ${LOG_MAX_KB}KB)"
+        && log "Log truncated (exceeded ${log_max_kb}KB)"
 }
 
 format_line() {
