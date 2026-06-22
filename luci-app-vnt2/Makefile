@@ -27,12 +27,8 @@ if [ "$$(uci -q get vnt2.global.arch)" = "0" ]; then
     uci commit vnt2
 fi
 $${INITD}/vnt2 enable
-(sleep 3
- $${INITD}/rpcd restart
- [ -x $${INITD}/uhttpd ] && $${INITD}/uhttpd restart
- [ -x $${INITD}/nginx  ] && $${INITD}/nginx   restart
- $${INITD}/vnt2 start
-) > /dev/null 2>&1 &
+$${INITD}/vnt2 restart
+rm -rf /tmp/luci-*
 
 exit 0
 endef
@@ -41,16 +37,10 @@ define Package/$(PKG_NAME)/prerm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 INITD=/etc/init.d
-BINDIR=/usr/bin
-CFGDIR=/etc/vnt2_config
 $${INITD}/vnt2 stop    2>/dev/null || true
 $${INITD}/vnt2 disable 2>/dev/null || true
 ubus call service set '{"name":"vnt2","instances":{}}' 2>/dev/null || true
-(sleep 2
- $${INITD}/rpcd restart
- [ -x $${INITD}/uhttpd ] && $${INITD}/uhttpd restart
- [ -x $${INITD}/nginx  ] && $${INITD}/nginx   restart
-) > /dev/null 2>&1 &
+rm -rf /tmp/luci-*
 
 exit 0
 endef
