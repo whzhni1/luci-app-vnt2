@@ -22,10 +22,6 @@ define Package/$(PKG_NAME)/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 INITD=/etc/init.d
-if [ "$$(uci -q get vnt2.global.arch)" = "0" ]; then
-    uci set vnt2.global.arch="$$(uname -m)"
-    uci commit vnt2
-fi
 $${INITD}/vnt2 enable
 $${INITD}/vnt2 restart
 rm -rf /tmp/luci-*
@@ -38,8 +34,6 @@ define Package/$(PKG_NAME)/prerm
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 INITD=/etc/init.d
 $${INITD}/vnt2 stop    2>/dev/null || true
-$${INITD}/vnt2 disable 2>/dev/null || true
-ubus call service set '{"name":"vnt2","instances":{}}' 2>/dev/null || true
 rm -rf /tmp/luci-*
 
 exit 0
