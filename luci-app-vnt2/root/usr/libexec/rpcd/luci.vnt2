@@ -7,6 +7,7 @@ import { cursor } from "uci";
 const DEFAULTS = {
     bin_path:      "/usr/bin",
     config_path:   "/etc/vnt2_config",
+    template_path: "/etc/vnt2_config",
     update_script: "/usr/libexec/vnt2-update.sh",
     update_dir:    "/tmp/vnt2_update",
     init_script:   "/etc/init.d/vnt2",
@@ -20,7 +21,7 @@ const START_METHODS = {
 const SETTING_DEFS = [
     ["bin_path",           "/usr/bin",        "string"],
     ["config_path",        "/etc/vnt2_config","string"],
-    ["arch",               "0",               "string"],
+    ["arch",               "auto",               "string"],
     ["mirror",             "github",          "string"],
     ["auto_update",        "0",               "bool"  ],
     ["update_interval",    "7",               "int"   ],
@@ -337,7 +338,7 @@ function cmdReadConfig(args) {
 
 function cmdReadTemplate(args) {
     initPaths();
-    let tmpl = `${CFG.config_path}/${args.type}.config`;
+    let tmpl = `${DEFAULTS.template_path}/${args.type}.config`;
     if (!fileExists(tmpl)) return { error: "Template not found" };
     return { content: safeRead(tmpl) };
 }
@@ -432,7 +433,7 @@ function parseTemplateFields(content) {
 
 function cmdGetTemplateFields(args) {
     initPaths();
-    let tmpl = `${CFG.config_path}/${args.type}.config`;
+    let tmpl = `${DEFAULTS.template_path}/${args.type}.config`;
     if (!fileExists(tmpl)) return { fields: [] };
     return { fields: parseTemplateFields(safeRead(tmpl)) };
 }
@@ -575,7 +576,7 @@ function cmdGetCtrlInfo(args) {
 
 function cmdGetSystemInfo() {
     initPaths();
-    let arch = trim(execOutput("uname -m 2>/dev/null"));
+    let arch = trim(execOutput(`'${DEFAULTS.update_script}' detect_arch 2>/dev/null`));
     let r    = { arch, bin_path: CFG.bin_path, config_path: CFG.config_path };
     let vers = [
         ["vnt_version",  "vnt2_cli"],
@@ -730,7 +731,7 @@ function cmdGetUpdateStatus(args) {
     if (!fileExists(statusF)) return { status: "idle" };
     let status  = trim(safeRead(statusF));
     let logTail = fileExists(logF)
-        ? trim(execOutput(`tail -n 30 '${logF}' 2>/dev/null`)) : "";
+        ? trim(execOutput(`cat '${logF}' 2>/dev/null`)) : "";
     if (status === "checking" || status === "downloading" || status === "installing")
         return { status, log: logTail };
     let readyVal = statusPrefix(status, "ready:");

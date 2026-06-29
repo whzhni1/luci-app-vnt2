@@ -1,11 +1,13 @@
 #!/bin/sh
-# /usr/libexec/vnt2-run.sh  VNT2 wrapper v1.5
+# /usr/libexec/vnt2-run.sh  VNT2 wrapper v1.8
 
 NAME="$1"
 LOG_FILE="$2"
 shift 2
 
+SELF_PID=$$
 CHECK_INTERVAL=100
+ROUTE_FIXED=0
 
 log() {
     printf '[%s] >>> %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$LOG_FILE"
@@ -16,11 +18,9 @@ rotate_log() {
     local log_max_kb log_max
     log_max_kb=$(uci get vnt2.global.log_max_kb 2>/dev/null || echo 300)
     log_max=$(( log_max_kb * 1024 ))
-    
     local size
     size=$(wc -c < "$LOG_FILE" 2>/dev/null)
     [ "${size:-0}" -ge "$log_max" ] || return
-    
     local tmp
     tmp=$(mktemp) || return
     tail -c $((log_max / 2)) "$LOG_FILE" > "$tmp" \
@@ -39,10 +39,31 @@ format_line() {
                s/\] DEBUG /\]［DEBUG］/g'
 }
 
+ROUTE_FIX_FLAG="/tmp/vnt2_route_fixed_${NAME}"
+
 reader_loop() {
-    local count=0
+    local count=0 formatted
     while IFS= read -r line; do
-        format_line "$line" >> "$LOG_FILE"
+        formatted=$(format_line "$line")
+        printf '%s\n' "$formatted" >> "$LOG_FILE"
+
+        case "$line" in
+            *"Registration failed"*)
+                log "Detected connection failure, triggering restart..."
+                kill "$SELF_PID" 2>/dev/null
+                ;;
+            *"连接服务器失败"*|*"kind: AlreadyExists"*)
+                if [ "$ROUTE_FIXED" = "0" ]; then
+                    log "Server failure detected, fixing routes..."
+                    ROUTE_FIXED=1
+                    setsid sh -c '/etc/init.d/vnt2 reload' > /dev/null 2>&1 &
+                fi
+                ;;
+            *"已连接服务器"*)
+                ROUTE_FIXED=0
+                ;;
+        esac
+
         count=$((count + 1))
         if [ $((count % CHECK_INTERVAL)) -eq 0 ]; then
             rotate_log

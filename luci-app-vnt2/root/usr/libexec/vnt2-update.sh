@@ -1,5 +1,5 @@
 #!/bin/sh
-# VNT2 更新脚本 v1.7
+# VNT2 更新脚本 v1.8
 
 CACHE_DIR="/tmp/vnt2_update"
 mkdir -p "$CACHE_DIR"
@@ -16,15 +16,21 @@ tmp_file()    { echo "$CACHE_DIR/$2";           }
 
 log() {
     local f="$(log_file "$1")"; shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$f"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "$msg" >> "$f"
+    LOG_FILE="$f"
 }
 
-set_status() { echo "$2" > "$(status_file "$1")"; }
+set_status() {
+    local f="$(status_file "$1")"
+    echo "$2" > "$f"
+    STATUS_FILE="$f"
+}
 
 format_size() {
     local b="$1"
-    [ "$b" -gt 1048576 ] && echo "$((b/1048576)) MB" && return
-    [ "$b" -gt 1024 ]    && echo "$((b/1024)) KB"    && return
+    [ "$b" -gt 1048576 ] && awk "BEGIN{printf \"%.1f MB\",$b/1048576}" && return
+    [ "$b" -gt 1024 ]    && awk "BEGIN{printf \"%.1f KB\",$b/1024}"    && return
     echo "$b B"
 }
 
@@ -39,12 +45,17 @@ pm_install() {
         esac
 
     elif ! command -v "$pkg" >/dev/null 2>&1; then
-        echo "  [DEP] Installing $pkg"
+        echo "[DEP] Installing: $pkg"
         $PM update >/dev/null 2>&1
         case "$PM" in
             apk)  apk add "$pkg" >/dev/null 2>&1 || rc=$? ;;
             opkg) opkg install "$pkg" >/dev/null 2>&1 || rc=$? ;;
         esac
+        if [ $rc -ne 0 ] || ! command -v "$pkg" >/dev/null 2>&1; then
+            echo "[DEP] Failed to install: $pkg"
+            return 1
+        fi
+        echo "[DEP] Installed: $pkg"
     fi
 
     [ $rc -eq 0 ] && [ $# -gt 0 ] && "$pkg" "$@"
@@ -95,9 +106,36 @@ file_type() {
     esac
 }
 
+detect_arch() {
+    local machine; machine="$(uname -m)"
+    case "$machine" in
+        x86_64)        echo "x86_64"  ;;
+        i[3-6]86)      echo "i686"    ;;
+        aarch64|arm64) echo "aarch64" ;;
+        armv7*)
+            grep -q "vfp" /proc/cpuinfo 2>/dev/null \
+                && echo "armv7 musleabihf" || echo "armv7 musleabi"
+            ;;
+        armv6*|armv5*)
+            grep -q "vfp" /proc/cpuinfo 2>/dev/null \
+                && echo "arm musleabihf" || echo "arm musleabi"
+            ;;
+        mips*)
+            [ "$(dd if=/proc/self/exe bs=1 skip=5 count=1 2>/dev/null \
+                 | od -An -tu1 | tr -d ' ')" = "1" ] \
+                && echo "mipsel" || echo "mips"
+            ;;
+        *) echo "$machine" ;;
+    esac
+}
+
 load_uci() {
     MIRROR="$(uci get vnt2.global.mirror          2>/dev/null || echo github)"
-    ARCH="$(uci get vnt2.global.arch              2>/dev/null || uname -m)"
+    _arch="$(uci get vnt2.global.arch 2>/dev/null)"
+    [ -z "$_arch" ] || [ "$_arch" = "auto" ] && _arch="$(detect_arch)"
+    ARCH1="$(echo "$_arch" | cut -d' ' -f1)"
+    ARCH2="$(echo "$_arch" | cut -d' ' -f2)"
+    [ "$ARCH2" = "$ARCH1" ] && ARCH2=""
     BIN_PATH="$(uci get vnt2.global.bin_path      2>/dev/null || echo /usr/bin)"
     UPX="$(uci get vnt2.global.upx_compressed     2>/dev/null || echo 0)"
     AUTO_UPDATE="$(uci get vnt2.global.auto_update 2>/dev/null || echo 0)"
@@ -244,38 +282,75 @@ _do_install() {
 
 _download_and_install() {
     local proj="$1" fname="$2" upx="$3"
-    local cache dl_url tmp size
+    local cache dl_url
 
     cache="$(cache_full "$proj")"
     dl_url="$(grep -o "https://[^\"']*/${fname}" "$cache" | head -1)"
     [ -z "$dl_url" ] && { log "$proj" "URL not found: $fname"; return 1; }
 
-    tmp="$(tmp_file "$proj" "$fname")"
-    rm -f "$tmp"
+    local f="$CACHE_DIR/$fname"
+    rm -f "$f"
 
-    curl -fsSL --connect-timeout 15 --max-time 300 \
-        --retry 3 --retry-delay 5 \
-        -o "$tmp" "$dl_url" >> "$(log_file "$proj")" 2>&1
-    local rc=$?
+    log "$proj" "Downloading: $fname"
+    set_status "$proj" "downloading"
 
-    if [ $rc -ne 0 ] || [ ! -s "$tmp" ]; then
+    local total_size
+    total_size="$(curl -sIL --connect-timeout 15 "$dl_url" 2>/dev/null \
+        | grep -i content-length | tail -1 | awk '{print $2}' | tr -d '\r')"
+
+    if [ -n "$total_size" ] && [ "$total_size" -gt 0 ] 2>/dev/null; then
+        log "$proj" "Total size: $(format_size "$total_size")"
+
+        (
+            while true; do
+                sleep 1
+                [ -f "$f" ] || continue
+                downloaded=$(wc -c < "$f" 2>/dev/null | tr -d ' ')
+                [ "${downloaded:-0}" -gt 0 ] || continue
+                pct=$(awk "BEGIN{printf \"%d\",$downloaded*100/$total_size}")
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] PROGRESS:${pct}%" >> "$LOG_FILE"
+                [ "$pct" -ge 100 ] && break
+            done
+        ) &
+        local progress_pid=$!
+
+        curl -fsSL --connect-timeout 15 --max-time 300 \
+            --retry 3 --retry-delay 5 \
+            -o "$f" "$dl_url"
+        local rc=$?
+
+        kill "$progress_pid" 2>/dev/null
+        wait "$progress_pid" 2>/dev/null
+    else
+        log "$proj" "Total size: unknown"
+        curl -fsSL --connect-timeout 15 --max-time 300 \
+            --retry 3 --retry-delay 5 \
+            -o "$f" "$dl_url"
+        local rc=$?
+    fi
+
+    if [ $rc -ne 0 ] || [ ! -s "$f" ]; then
         log "$proj" "Download failed rc=$rc: $fname"
-        rm -f "$tmp"
+        set_status "$proj" "error:Download failed"
+        rm -f "$f"
         return 1
     fi
 
-    size="$(wc -c < "$tmp" | tr -d ' ')"
+    local size
+    size="$(wc -c < "$f" | tr -d ' ')"
     log "$proj" "Downloaded: $fname $(format_size "$size")"
-    verify_download "$proj" "$tmp" || return 1
+    set_status "$proj" "downloading:100"
+
+    verify_download "$proj" "$f" || return 1
 
     set_status "$proj" "installing"
     if [ "$proj" = "luci-app-vnt2" ]; then
-        pm_install "$tmp" \
+        pm_install "$f" \
             && log "$proj" "Installed: $fname" \
-            || { log "$proj" "Install failed: $fname"; rm -f "$tmp"; return 1; }
-        rm -f "$tmp"
+            || { log "$proj" "Install failed: $fname"; rm -f "$f"; return 1; }
+        rm -f "$f"
     else
-        _install_bin "$proj" "$tmp" "$upx"
+        _install_bin "$proj" "$f" "$upx"
     fi
 }
 
@@ -330,7 +405,7 @@ _install_bin() {
 }
 
 pick_latest() {
-    local proj="$1" arch="$2"
+    local proj="$1" arch1="$2" arch2="$3"
     LATEST_TAG="" LATEST_FILE=""
 
     local slim; slim="$(cache_slim "$proj")"
@@ -343,11 +418,15 @@ pick_latest() {
     filenames="$(grep -o '"filenames":\[[^]]*\]' "$slim" | head -1 \
                  | grep -oE '"[^"]+\.[^"]+"' | tr -d '"')"
 
-    local f
-    for pattern in "$arch" "$(echo "$arch" | cut -d'_' -f1)"; do
-        f="$(echo "$filenames" | grep "$pattern" | grep -v 'i18n' | head -1)"
-        [ -n "$f" ] && { LATEST_FILE="$f"; return 0; }
-    done
+    local pattern f
+    if [ -n "$arch2" ]; then
+        pattern="${arch1}.*${arch2}[^h]"
+    else
+        pattern="${arch1}[^e]"
+    fi
+
+    f="$(echo "$filenames" | grep -E "$pattern" | grep -v 'i18n' | head -1)"
+    [ -n "$f" ] && { LATEST_FILE="$f"; return 0; }
 
     LATEST_FILE="$(echo "$filenames" | grep -v 'i18n' | head -1)"
     [ -n "$LATEST_FILE" ]
@@ -369,7 +448,7 @@ auto_update_one() {
 
     cmd_check "$proj" "$MIRROR" || return 1
 
-    pick_latest "$proj" "$ARCH" || {
+    pick_latest "$proj" "$ARCH1" "$ARCH2" || {
         log "$proj" "No matching file found"
         return 1
     }
@@ -436,5 +515,6 @@ cmd_auto_update() {
 case "$1" in
     check)    cmd_check    "$2" "$3"           ;;
     download) cmd_download "$2" "$3" "$4" "$5" ;;
+    detect_arch)   detect_arch                   ;;
     *)        cmd_auto_update "$@"             ;;
 esac

@@ -327,7 +327,7 @@ function buildEditor(self, name, isNew, tab, res) {
                 E('span', {'class':'vnt2-breadcrumb-link','click':backToList},
                     _('%s Config List').format(TABS[tab])),
                 E('span', {'class':'vnt2-breadcrumb-sep'}, ' › '),
-                E('span', {}, (isNew ? _('New') : _('Edit')) + _('Configuration'))
+                E('span', {}, isNew ? _('New Configuration') : _('Edit Configuration'))
             ]),
             E('div', {'style':'display:flex;align-items:center;margin-top:8px;'}, [
                 E('label', {'style':'font-weight:bold;margin-right:6px;flex-shrink:0;'},
@@ -678,7 +678,7 @@ function saveConfig(self, oldName, newName, tab, formEl, fields, templateContent
                     saveListState(self, true);
                 });
         }).catch(function(err) {
-            self._ui.notify(_('Save error: ') + String(err), 'error');
+            self._ui.notify(_('Save error: %s').format(String(err)), 'error');
         });
     });
 }

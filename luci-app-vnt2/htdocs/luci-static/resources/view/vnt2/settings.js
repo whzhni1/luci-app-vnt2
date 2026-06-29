@@ -53,6 +53,18 @@ function detectLang() {
     return (navigator.language || navigator.userLanguage || '').toLowerCase();
 }
 
+(function() {
+    var id = 'vnt2-inline-style';
+    if (document.getElementById(id)) return;
+    var style = document.createElement('style');
+    style.id = id;
+    style.textContent = [
+        '.vnt2-progress-track{background:#eee;border-radius:4px;height:8px;margin-top:8px;overflow:hidden;}',
+        '.vnt2-progress-bar{height:100%;border-radius:4px;background:#4caf50;width:0%;transition:width 0.5s ease,background 0.3s;}'
+    ].join('');
+    document.head.appendChild(style);
+})();
+
 return view.extend({
 
     load: function() {
@@ -91,7 +103,7 @@ return view.extend({
         return [
             g('bin_path')                  || '/usr/bin',
             g('config_path')               || '/etc/vnt2_config',
-            g('arch')                      || '0',
+            g('arch')                      || 'auto',
             g('mirror')                    || 'github',
             boolStr(g('auto_update')),
             parseInt(g('update_interval')) || 7,
@@ -215,22 +227,41 @@ return view.extend({
                     _('Directory of configuration files, default /etc/vnt2_config')),
                 vui.buildFormRow(_('Device Architecture'),
                     buildText('s-arch', 'arch', 'width:100%;max-width:200px;box-sizing:border-box;'),
-                    _('Current detected:') + (self._sysinfo.arch || _('Unknown'))),
+                    _('Current detected: %s, automatic recognition by auto, or manual specification')
+                       .format(self._sysinfo.arch || _('Unknown'))),
                 vui.buildFormRow(_('Download Mirror'), mirrorSel, _('Multiple mirrors ensure successful downloads')),
                 vui.buildFormRow(_('Auto Update'),
                     E('label', { 'style': 'cursor:pointer;user-select:none;' }, [
-                        buildCheck('s-auto-update', 'auto_update'),
+                        (function() {
+                            var cb = E('input', { 'type': 'checkbox', 'id': 's-auto-update',
+                                'change': function() {
+                                    uci.set('vnt2', 'global', 'auto_update', this.checked ? '1' : '0');
+                                    var row = document.getElementById('s-interval-row');
+                                    if (row) row.style.display = this.checked ? '' : 'none';
+                                }
+                            });
+                            if (g('auto_update') === '1') cb.setAttribute('checked', 'checked');
+                            return cb;
+                        })(),
                         E('span', { 'style': 'margin-left:6px;' }, _('Enable auto update'))
                     ]), _('Automatically check and update programs periodically')),
-                vui.buildFormRow(_('Update Interval (Days)'),
-                    E('input', { 'type': 'number', 'class': 'cbi-input-text',
-                        'id': 's-interval',
-                        'value': g('update_interval') || '7',
-                        'min': '1', 'max': '365', 'style': 'width:80px;',
-                        'change': function() {
-                            uci.set('vnt2', 'global', 'update_interval', this.value || '7');
-                        }
-                    }), _('Number of days between automatic update checks')),
+                E('div', { 'id': 's-interval-row', 'style': 'display:' + (g('auto_update') === '1' ? '' : 'none') + ';' }, [
+                    (function() {
+                        var inpInterval = E('input', { 'type': 'number', 'class': 'cbi-input-text',
+                            'id': 's-interval',
+                            'value': g('update_interval') || '7',
+                            'min': '1', 'max': '365', 'style': 'width:80px;',
+                            'input': function() {
+                                descInterval.textContent = _('Check for updates every %d days').format(this.value || '7');
+                            },
+                            'change': function() {
+                                uci.set('vnt2', 'global', 'update_interval', this.value || '7');
+                            }
+                        });
+                        var descInterval = E('span', {}, _('Check for updates every %d days').format(inpInterval.value));
+                        return vui.buildFormRow(_('Update Interval (Days)'), inpInterval, descInterval);
+                    })()
+                ]),
                 vui.buildFormRow(_('UPX Compression'),
                     E('label', { 'style': 'cursor:pointer;user-select:none;' }, [
                         buildCheck('s-upx', 'upx_compressed'),
@@ -240,63 +271,57 @@ return view.extend({
             E('div', { 'class': 'cbi-section' }, [
                 E('h3', {}, _('Process Watchdog (Respawn)')),
                     ...(function() {
-                        var defThreshold = g('respawn_threshold') || '3600';
-                        var defTimeout   = g('respawn_timeout')   || '5';
-                        var defRetry     = g('respawn_retry')      || '5';
-
-                        var descThreshold = E('span', {}, _('Count crashes within %d seconds, 0 = unlimited').format(defThreshold));
-                        var descTimeout = E('span', {}, _('Wait %d seconds before restart after crash').format(defTimeout));
-                        var descRetry = E('span', {}, _('Max %d restarts then give up, 0 = unlimited').format(defRetry));
-
                         var inpThreshold = E('input', { 'type': 'number', 'class': 'cbi-input-text',
                             'id': 's-respawn-threshold',
-                            'value': defThreshold, 'min': '0', 'style': 'width:100px;',
+                            'value': g('respawn_threshold') || '3600', 'min': '0', 'style': 'width:100px;',
+                            'input':  function() {
+                                descThreshold.textContent = _('Count crashes within %d seconds, 0 = unlimited').format(this.value || '3600');
+                            },
                             'change': function() {
-                                var v = this.value || '3600';
-                                uci.set('vnt2', 'global', 'respawn_threshold', v);
-                                descThreshold.textContent = _('Count crashes within %d seconds, 0 = unlimited').format(v);
+                                uci.set('vnt2', 'global', 'respawn_threshold', this.value || '3600');
                             }
                         });
+                        var descThreshold = E('span', {}, _('Count crashes within %d seconds, 0 = unlimited').format(inpThreshold.value));
+
                         var inpTimeout = E('input', { 'type': 'number', 'class': 'cbi-input-text',
                             'id': 's-respawn-timeout',
-                            'value': defTimeout, 'min': '0', 'style': 'width:100px;',
-                            'change': function() {
-                                var v = this.value || '5';
-                                uci.set('vnt2', 'global', 'respawn_timeout', v);
-                                descTimeout.textContent = _('Wait %d seconds before restart after crash').format(v);
+                            'value': g('respawn_timeout') || '5', 'min': '0', 'style': 'width:100px;',
+                            'input': function() {
+                                uci.set('vnt2', 'global', 'respawn_timeout', this.value || '5');
+                                descTimeout.textContent = _('Wait %d seconds before restart after crash').format(this.value || '5');
                             }
                         });
+                        var descTimeout = E('span', {}, _('Wait %d seconds before restart after crash').format(inpTimeout.value));
+
                         var inpRetry = E('input', { 'type': 'number', 'class': 'cbi-input-text',
                             'id': 's-respawn-retry',
-                            'value': defRetry, 'min': '0', 'style': 'width:100px;',
-                            'change': function() {
-                                var v = this.value || '5';
-                                uci.set('vnt2', 'global', 'respawn_retry', v);
-                                descRetry.textContent = _('Max %d restarts then give up, 0 = unlimited').format(v);
+                            'value': g('respawn_retry') || '5', 'min': '0', 'style': 'width:100px;',
+                            'input': function() {
+                                uci.set('vnt2', 'global', 'respawn_retry', this.value || '5');
+                                descRetry.textContent = _('Max %d restarts then give up, 0 = unlimited').format(this.value || '5');
                             }
                         });
+                        var descRetry = E('span', {}, _('Max %d restarts then give up, 0 = unlimited').format(inpRetry.value));
 
                         return [
                             vui.buildFormRow(_('Failure Threshold (s)'), inpThreshold, descThreshold),
-                            vui.buildFormRow(_('Restart Delay (s)'), inpTimeout,   descTimeout),
-                            vui.buildFormRow(_('Restart Retries'),   inpRetry,     descRetry),
+                            vui.buildFormRow(_('Restart Delay (s)'),     inpTimeout,   descTimeout),
+                            vui.buildFormRow(_('Restart Retries'),        inpRetry,     descRetry),
                         ];
                     })()
                 ]),
             E('div', { 'class': 'cbi-section' }, [
                 E('h3', {}, _('Log Settings')),
                 ...(function() {
-                    var defLogMax = g('log_max_kb') || '300';
-                    var descLogMax = E('span', {}, _('Each instance log truncated at %d KB').format(defLogMax));
                     var inpLogMax = E('input', { 'type': 'number', 'class': 'cbi-input-text',
                         'id': 's-log-max-kb',
-                        'value': defLogMax, 'min': '50', 'max': '10240', 'style': 'width:100px;',
-                        'change': function() {
-                            var v = this.value || '300';
-                            uci.set('vnt2', 'global', 'log_max_kb', v);
-                            descLogMax.textContent = _('Each instance log truncated at %d KB').format(v);
+                        'value': g('log_max_kb') || '300', 'min': '50', 'max': '10240', 'style': 'width:100px;',
+                        'input': function() {
+                            uci.set('vnt2', 'global', 'log_max_kb', this.value || '300');
+                            descLogMax.textContent = _('Each instance log truncated at %d KB').format(this.value || '300');
                         }
                     });
+                    var descLogMax = E('span', {}, _('Each instance log truncated at %d KB').format(inpLogMax.value));
                     return [
                         vui.buildFormRow(_('Log Max Size (KB)'), inpLogMax, descLogMax),
                     ];
@@ -392,6 +417,11 @@ return view.extend({
                 E('span', { 'id': bid + '-status', 'style': 'font-size:13px;color:#888;' },
                     _('Click to check and get version info'))
             ]),
+            E('div', { 'id': bid + '-progress', 'style': 'display:none;margin-top:10px;' }, [
+                E('div', { 'class': 'vnt2-progress-track' }, [
+                E('div', { 'id': bid + '-bar', 'class': 'vnt2-progress-bar' })
+                ])
+            ]),
             E('div', { 'id': bid + '-mirror-row',
                 'style': 'display:none;margin-top:8px;align-items:center;gap:8px;' }, [
                 E('span', { 'style': 'font-size:13px;color:#666;' }, _('Switch mirror and retry:')),
@@ -438,6 +468,15 @@ return view.extend({
 
     _el: function(id) { return document.getElementById(id); },
 
+    _setBar: function(bid, pct) {
+        var bar      = this._el(bid + '-bar');
+        var progress = this._el(bid + '-progress');
+        if (!bar || !progress) return;
+        var p = Math.min(100, Math.max(0, pct || 0));
+        progress.style.display = 'block';
+        bar.style.width        = p + '%';
+    },
+
     _setStatus: function(bid, text, color) {
         var el = this._el(bid + '-status');
         if (el) { el.textContent = text; el.style.color = color || '#888'; }
@@ -480,6 +519,7 @@ return view.extend({
         self._hide(bid + '-mirror-row');
         self._hide(bid + '-selects');
         self._hide(bid + '-log');
+        self._hide(bid + '-progress');
         self._setStatus(bid, _('Checking...'), '#888');
         callGetUpstreamVersion(project, mirror).then(function() {
             self._pollStatus(project, bid, 'check');
@@ -528,6 +568,7 @@ return view.extend({
 
         if (btn) btn.disabled = true;
         self._hide(bid + '-mirror-row');
+        self._setBar(bid, 0);
         self._showLog(bid, _('Preparing to download...'));
         self._setStatus(bid, _('Downloading...'), '#888');
 
@@ -576,11 +617,19 @@ return view.extend({
                 }
                 if (s.status === 'downloading') {
                     if (s.log) self._showLog(bid, s.log);
-                    self._setStatus(bid, _('Downloading') + dot, '#888');
+                    var pct = 0;
+                    var lines = (s.log || '').split('\n');
+                    for (var i = lines.length - 1; i >= 0; i--) {
+                        var m = lines[i].match(/PROGRESS:(\d+)/);
+                        if (m) { pct = parseInt(m[1]); break; }
+                    }
+                    self._setBar(bid, pct);
+                    self._setStatus(bid, _('Downloading... %d%%').format(pct), '#888');
                     return;
                 }
                 if (s.status === 'installing' || s.status === 'processing') {
                     if (s.log) self._showLog(bid, s.log);
+                    self._setBar(bid, 100);
                     self._setStatus(bid, _('Installing...'), '#888');
                     return;
                 }
@@ -594,6 +643,7 @@ return view.extend({
                 }
                 if (s.status === 'done') {
                     if (btn) btn.disabled = false;
+                    self._setBar(bid, 100);
                     var installed = tr(s.installed) || '';
                     self._setStatus(bid, _('✓ Installation complete: %s').format(installed), '#28a745');
                     if (s.log) self._showLog(bid, s.log);

@@ -1,6 +1,6 @@
 # VNT2 LuCI i18n Chinese (Simplified)
 # zh-cn
-# v1.2
+# v1.3
 
 msgid ""
 msgstr ""
@@ -40,11 +40,11 @@ msgstr "暂无 %s 配置，点击「新建配置」开始添加。"
 msgid "%s Config List"
 msgstr "%s 配置列表"
 
-msgid "New"
-msgstr "新建"
+msgid "New Configuration"
+msgstr "新建配置"
 
-msgid "Edit"
-msgstr "编辑"
+msgid "Edit Configuration"
+msgstr "编辑配置"
 
 msgid "Delete"
 msgstr "删除"
@@ -218,8 +218,8 @@ msgstr "实例 \"%s\" %s 成功"
 msgid "Instance \"%s\" %s failed: %s"
 msgstr "实例 \"%s\" %s 失败：%s"
 
-msgid "Action failed:"
-msgstr "操作失败："
+msgid "Action failed: %s"
+msgstr "操作失败：%s"
 
 msgid "All %s commands sent"
 msgstr "全部 %s 指令已发送"
@@ -507,8 +507,8 @@ msgstr "配置文件所在目录，默认 /etc/vnt2_config"
 msgid "Device Architecture"
 msgstr "设备架构"
 
-msgid "Current detected:"
-msgstr "当前检测"
+msgid "Current detected: %s, automatic recognition by auto, or manual specification"
+msgstr "当前检测：%s，auto 自动识别，或手动指定"
 
 msgid "Unknown"
 msgstr "未知"
@@ -528,8 +528,8 @@ msgstr "定期自动检查并更新程序"
 msgid "Update Interval (Days)"
 msgstr "更新间隔（天）"
 
-msgid "Number of days between automatic update checks"
-msgstr "自动检查更新的间隔天数"
+msgid "Check for updates every %d days"
+msgstr "每 %d 天检查一次更新"
 
 msgid "UPX Compression"
 msgstr "UPX 压缩"
@@ -666,6 +666,9 @@ msgstr "检查中"
 msgid "Downloading"
 msgstr "下载中"
 
+msgid "Downloading... %d%%"
+msgstr "正在下载... %d%%"
+
 msgid "Installing..."
 msgstr "安装中..."
 
@@ -789,7 +792,19 @@ msgstr "已注册 type="
 msgid "Fix route:"
 msgstr "修复路由："
 
+msgid "Route switched but still unreachable, try next..."
+msgstr "路由已切换但仍无法访问，尝试下一个..."
+
 #: i18n-map.js (vnt2-update.sh 输出)
+msgid "[DEP] Installing:"
+msgstr "［依赖］安装："
+
+msgid "[DEP] Failed to install:"
+msgstr "［依赖］安装失败："
+
+msgid "[DEP] Installed:"
+msgstr "［依赖］已安装："
+
 msgid "Checking version:"
 msgstr "正在检查版本："
 
@@ -837,6 +852,12 @@ msgstr "下载地址未找到，请重新检查版本"
 
 msgid "Downloading:"
 msgstr "正在下载："
+
+msgid "Total size:"
+msgstr "文件大小："
+
+msgid "PROGRESS:"
+msgstr "下载进度："
 
 msgid "Download failed rc="
 msgstr "下载失败，返回码="
@@ -934,6 +955,12 @@ msgstr "［错误］"
 
 msgid "［DEBUG］"
 msgstr "［调试］"
+
+msgid "Detected connection failure, triggering restart..."
+msgstr "检测到连接失败，正在触发重启..."
+
+msgid "Server failure detected, fixing routes..."
+msgstr "检测到服务器故障，正在修复路由..."
 
 msgid "Starting:"
 msgstr "启动："

@@ -13,18 +13,24 @@ return baseclass.extend({
             ['Start failed: binary is not executable:',    _('Start failed: binary is not executable:')],
             ['Registered type=',                           _('Registered type=')],
             ['Fix route:',                                 _('Fix route:')],
+            ['Route switched but still unreachable, try next...',   _('Route switched but still unreachable, try next...')],
 
             // vnt2-run.sh
             ['［INFO］',   _('［INFO］')],
             ['［WARN］',   _('［WARN］')],
             ['［ERROR］',  _('［ERROR］')],
             ['［DEBUG］',  _('［DEBUG］')],
+            ['Detected connection failure, triggering restart...',  _('Detected connection failure, triggering restart...')],
+            ['Server failure detected, fixing routes...',                        _('Server failure detected, fixing routes...')],
             ['Starting:',                        _('Starting:')],
             ['Process exited',                   _('Process exited')],
             ['Log truncated (exceeded',    _('Log truncated (exceeded')],
             ['mkfifo failed',                    _('mkfifo failed')],
 
              // vnt2-update.sh
+            ['[DEP] Installing:',      _('[DEP] Installing:')],
+            ['[DEP] Failed to install:', _('[DEP] Failed to install:')],
+            ['[DEP] Installed:',       _('[DEP] Installed:')],
             ['Checking version:',                _('Checking version:')],
             ['API request failed or no version found',          _('API request failed or no version found')],
             ['API request failed, please switch mirror',        _('API request failed, please switch mirror')],
@@ -41,6 +47,8 @@ return baseclass.extend({
             ['Download URL not found:',          _('Download URL not found:')],
             ['Download URL not found, please re-check version', _('Download URL not found, please re-check version')],
             ['Downloading:',                     _('Downloading:')],
+            ['Total size:',                     _('Total size:')],
+            ['PROGRESS:',                     _('PROGRESS:')],
             ['Download failed rc=',              _('Download failed rc=')],
             ['Download failed(rc=',              _('Download failed(rc=')],
             ['), please switch mirror',          _('), please switch mirror')],

@@ -105,12 +105,20 @@ function formatUptime(s) {
 }
 
 function wrapContent(tag, content) {
-    return E(tag, {'style':[
-        'border:1px solid #ddd','border-radius:4px','padding:12px','margin:0',
-        'font-size:12px','line-height:1.6','max-height:300px','overflow-y:auto',
-        'box-sizing:border-box',
-        tag==='pre'?'white-space:pre-wrap;word-break:break-all':''
-    ].filter(Boolean).join(';')}, content);
+    return E('div', {
+        'style': [
+            'border:1px solid #ddd', 'border-radius:4px',
+            'max-height:300px', 'overflow-y:auto', 'overflow-x:auto',
+            '-webkit-overflow-scrolling:touch', 'box-sizing:border-box',
+            'width:100%', 'max-width:100%'
+        ].join(';')
+    }, [E(tag, {
+        'style': [
+            'padding:12px', 'margin:0', 'font-size:12px', 'line-height:1.6',
+            'display:inline-block', 'min-width:100%', 'box-sizing:border-box',
+            tag === 'pre' ? 'white-space:pre;word-break:normal' : ''
+        ].filter(Boolean).join(';')
+    }, content)]);
 }
 
 function buildTable(rows, tdStyle) {
@@ -252,10 +260,11 @@ return view.extend({
                 E('h3',{},_('Node Information')),
                 self._renderCtrlPanel(instances)
             ]),
-            E('div',{'style':'text-align:center;padding:12px;margin-top:16px;border-radius:8px;'+
-                'outline:1px solid #ddd;font-size:13px;color:#666;margin-bottom:60px;'+
-                'box-sizing:border-box;width:100%;max-width:100%;overflow:hidden;word-break:break-word;'},
-                linkNodes)
+            E('div', {'style': 'text-align:center;padding:12px;margin-top:16px;border-radius:8px;' +
+                 'outline:1px solid #ddd;font-size:13px;color:#666;margin-bottom:60px;' +
+                 'box-sizing:border-box;width:100%;max-width:100%;' +
+                 'overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;'
+            }, linkNodes)
         ]);
 
         if (self._selectedInstance&&instances.some(function(i){
@@ -363,7 +372,7 @@ return view.extend({
                 ok?'success':'error'
             );
             refreshList(self);
-        }).catch(function(err){self._ui.notify(_('Action failed:')+String(err),'error');});
+        }).catch(function(err){self._ui.notify(_('Action failed: %s').format(String(err)), 'error');});
     },
 
     _doBatchAction: function(actId) {
