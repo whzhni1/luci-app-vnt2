@@ -23,6 +23,7 @@ define Package/$(PKG_NAME)/postinst
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 INITD=/etc/init.d
 $${INITD}/vnt2 enable
+$${INITD}/rpcd restart
 $${INITD}/vnt2 restart
 rm -rf /tmp/luci-*
 
