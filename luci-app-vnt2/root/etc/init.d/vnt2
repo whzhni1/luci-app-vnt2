@@ -528,10 +528,9 @@ start_service() {
     init_paths
     echo "VNT2: starting all enabled instances..."
     if [ ! -x "${BIN_PATH}/vnt2_cli" ] || [ ! -x "${BIN_PATH}/vnts2" ]; then
-        [ -x "$UPDATE_SCRIPT" ] && ! [ -f /tmp/vnt2_downloading ] && {
-            touch /tmp/vnt2_downloading
+        [ -x "$UPDATE_SCRIPT" ] && {
             echo "Starting automatic download of vnt2/vnts2..."
-            setsid sh -c "$UPDATE_SCRIPT vnt vnts > /dev/null 2>&1; rm -f /tmp/vnt2_downloading" &
+            setsid sh -c "$UPDATE_SCRIPT" >/dev/null 2>&1 &
         }
         return 0
     fi
@@ -543,8 +542,8 @@ start_service() {
 
 stop_service() {
     each_all_instance _cleanup_tun
-    cleanup_fw
     cleanup_network_interfaces
+    cleanup_fw
     uci commit firewall
     _fw_reload
 }

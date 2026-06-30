@@ -692,13 +692,30 @@ return view.extend({
             }
             fileSel.innerHTML = '';
             if (!release || !release.filenames) return;
-            var arch    = uci.get('vnt2','global','arch') || '';
-            var matched = -1;
+            var uciArch   = uci.get('vnt2', 'global', 'arch') || '';
+            var sysArch   = (self._sysinfo && self._sysinfo.arch) || '';
+            var rawArch   = (uciArch && uciArch !== 'auto') ? uciArch : sysArch;
+            var archParts = rawArch ? rawArch.split(' ') : [];
+            if (archParts.length === 1 && sysArch) {
+                var sysParts = sysArch.split(' ');
+                if (sysParts[0] === archParts[0] && sysParts[1]) {
+                    archParts.push(sysParts[1]);
+                }
+            }
+            var arch1     = archParts[0] || '';
+            var arch2     = archParts[1] || '';
+            var matched   = -1;
             release.filenames.forEach(function(fname, idx) {
                 fileSel.appendChild(E('option', { 'value': fname }, fname));
-                if (matched < 0 && arch && fname.indexOf(arch) !== -1) matched = idx;
                 if (matched < 0 && bid.indexOf('luci-app') !== -1
                     && fname.indexOf('luci-app') !== -1) matched = idx;
+                if (matched >= 0) return;
+                if (!arch1) return;
+                var hit = arch2
+                    ? (fname.indexOf(arch1) !== -1 && fname.indexOf(arch2) !== -1
+                       && !(arch2.slice(-1) !== 'f' && fname.indexOf(arch2 + 'hf') !== -1))
+                    : (fname.indexOf(arch1) !== -1);
+                if (hit) matched = idx;
             });
             if (matched >= 0) fileSel.selectedIndex = matched;
         }

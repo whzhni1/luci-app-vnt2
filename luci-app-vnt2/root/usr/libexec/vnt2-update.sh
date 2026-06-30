@@ -136,6 +136,12 @@ load_uci() {
     ARCH1="$(echo "$_arch" | cut -d' ' -f1)"
     ARCH2="$(echo "$_arch" | cut -d' ' -f2)"
     [ "$ARCH2" = "$ARCH1" ] && ARCH2=""
+    if [ -n "$ARCH1" ] && [ -z "$ARCH2" ]; then
+        _detected="$(detect_arch)"
+        _det1="$(echo "$_detected" | cut -d' ' -f1)"
+        _det2="$(echo "$_detected" | cut -d' ' -f2)"
+        [ "$_det1" = "$ARCH1" ] && [ "$_det2" != "$_det1" ] && ARCH2="$_det2"
+    fi
     BIN_PATH="$(uci get vnt2.global.bin_path      2>/dev/null || echo /usr/bin)"
     UPX="$(uci get vnt2.global.upx_compressed     2>/dev/null || echo 0)"
     AUTO_UPDATE="$(uci get vnt2.global.auto_update 2>/dev/null || echo 0)"
