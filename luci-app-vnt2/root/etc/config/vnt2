@@ -31,7 +31,6 @@ config global 'global'
 	option web_stop_keys '禁用|停用|停止配置|disable|disabled'
 	option web_delete_keys '删除配置|删除|delete config|deleted config|DELETE /api/config'
 	option fault_restart_keys 'Registration failed'
-	option fault_route_keys '连接服务器失败|kind: AlreadyExists'
 	option online_keys 'public_addr'
 	option online_exclude_keys '0.0.0.0:0'
 
@@ -99,4 +98,3 @@ config query 'ctrl_route'
 	option label 'Route'
 	option binary 'vnt_ctrl'
 	option command '{bin} -p {ctrl_port} route'
-
