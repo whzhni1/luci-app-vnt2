@@ -1,10 +1,19 @@
 #!/bin/sh
 
 case "$ACTION" in
-    add|remove)
-        [ -x /etc/init.d/vnt2 ] || exit 0
-        /etc/init.d/vnt2 refresh_tuntap_firewall >/dev/null 2>&1 &
+    add)
+        dev="${INTERFACE:-$DEVICENAME}"
+        [ -n "$dev" ] && [ ! -e "/sys/class/net/$dev/tun_flags" ] && exit 0
+        ;;
+    remove)
+        ;;
+    *)
+        exit 0
         ;;
 esac
 
+[ -x /etc/init.d/vnt2 ] || exit 0
+/etc/init.d/vnt2 refresh_tuntap_firewall >/dev/null 2>&1 </dev/null &
+
 exit 0
+

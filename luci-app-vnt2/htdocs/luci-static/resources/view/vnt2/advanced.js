@@ -23,7 +23,7 @@ var callGetSettings    = rpcDeclare('get_settings', []);
 var callGetLogKeys     = rpcDeclare('get_log_keys', []);
 var callSaveLogKeys    = rpcDeclare('save_log_keys', [
     'web_sync_keys','web_start_keys','web_stop_keys','web_delete_keys',
-    'fault_restart_keys','fault_route_keys','online_keys','online_exclude_keys'
+    'fault_restart_keys','online_keys','online_exclude_keys'
 ]);
 
 var TAB_DEFS = [
@@ -39,7 +39,6 @@ var DEFAULT_LOG_KEYS = {
     web_stop_keys:       '禁用|停用|停止配置|disable|disabled',
     web_delete_keys:     '删除配置|删除|delete config|deleted config|DELETE /api/config',
     fault_restart_keys:  'Registration failed',
-    fault_route_keys:    '连接服务器失败|kind: AlreadyExists',
     online_keys:         'public_addr',
     online_exclude_keys: '0.0.0.0:0'
 };
@@ -50,7 +49,6 @@ var LOG_KEY_DEFS = [
     ['web_stop_keys', _('Web Instance Stop Keywords'), _('Log lines containing a file name matching these keywords mark the instance as disabled in UCI')],
     ['web_delete_keys', _('Web Instance Delete Keywords'), _('Log lines containing a file name matching these keywords remove the instance record from UCI')],
     ['fault_restart_keys', _('Fault Restart Keywords'), _('Matching lines trigger the network check and process restart logic')],
-    ['fault_route_keys', _('Route Fix Keywords'), _('Matching lines trigger the route repair logic')],
     ['online_keys', _('Online Detect Keywords'), _('Matching lines mark the instance as online')],
     ['online_exclude_keys', _('Online Exclude Keywords'), _('Lines also matching these keywords are ignored by online detection')]
 ];

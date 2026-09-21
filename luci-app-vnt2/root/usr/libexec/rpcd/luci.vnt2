@@ -23,7 +23,6 @@ const LOG_KEY_DEFS = [
     ["web_stop_keys",      "禁用|停用|停止配置|disable|disabled"],
     ["web_delete_keys",    "删除配置|删除|delete config|deleted config|DELETE /api/config"],
     ["fault_restart_keys", "Registration failed"],
-    ["fault_route_keys",   "连接服务器失败|kind: AlreadyExists"],
     ["online_keys",        "public_addr"],
     ["online_exclude_keys","0.0.0.0:0"],
 ];
@@ -888,7 +887,7 @@ function cmdListInstances() {
     let instances = [];
 
     // LuCI 状态页显示 vnt2_web 入口进程和 config_path 中的 .vnt/.vnts 实例，不显示 vnt2_web 内部 .toml 实例。
-    let webEnabled = (execOutput("uci -q get vnt2.global.web_enabled 2>/dev/null") || "1") !== "0";
+    let webEnabled = trim(execOutput("uci -q get vnt2.global.web_enabled 2>/dev/null")) !== "0";
     let webPid = webEnabled ? readInstancePid("vnt2_web") : "";
     let webRunning = !!webPid;
     let webInfo = {
@@ -1911,7 +1910,7 @@ function cmdGetEnabled(args) {
     });
     let configs = [];
     if (type === "vnt") {
-        let webEnabled = (execOutput("uci -q get vnt2.global.web_enabled 2>/dev/null") || "1") !== "0";
+        let webEnabled = trim(execOutput("uci -q get vnt2.global.web_enabled 2>/dev/null")) !== "0";
         push(configs, { name:"vnt2_web", enabled:webEnabled, start_method:"vnt2_web", method_set:true, web_addr:getWebAddr(), is_web_process:true, locked:true });
     }
     for (let i = 0; i < length(names); i++) {
@@ -2276,7 +2275,7 @@ const SIGNATURES = {
     list_web_instances:   {},
     web_instance_action:  { file_name: "String", action: "String" },
     get_log_keys:         {},
-    save_log_keys:        { web_sync_keys: "String", web_start_keys: "String", web_stop_keys: "String", web_delete_keys: "String", fault_restart_keys: "String", fault_route_keys: "String", online_keys: "String", online_exclude_keys: "String" },
+    save_log_keys:        { web_sync_keys: "String", web_start_keys: "String", web_stop_keys: "String", web_delete_keys: "String", fault_restart_keys: "String", online_keys: "String", online_exclude_keys: "String" },
     sync_web_state:       {},
     restore_web_state:    {},
     save_settings: {
@@ -2326,4 +2325,3 @@ switch (argv[0]) {
         warn(`Usage: ${argv[0]} {list|call <method>}\n`);
         exit(1);
 }
-

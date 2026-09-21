@@ -7,12 +7,10 @@ INSTANCE_TYPE="$3"
 shift 3
 
 CHECK_INTERVAL=100
-ROUTE_FIX_LOCK="/tmp/vnt2_log/vnt2_route_fixing"
 KILL_RECORD="/tmp/vnt2_log/vnt2_kill_record"
 KILL_KEY="${NAME}.${INSTANCE_TYPE}"
 SELF_PID=$$
 START_TIME=$(date +%s)
-ROUTE_FIXED=0
 KILL_INTERVAL="${KILL_INTERVAL:-$(uci get vnt2.global.kill_interval 2>/dev/null || echo 1800)}"
 STARTUP_CHECK_WINDOW="${STARTUP_CHECK_WINDOW:-$(uci get vnt2.global.startup_check_window 2>/dev/null || echo 60)}"
 GOT_PUBLIC_ADDR=0
@@ -35,7 +33,6 @@ WEB_START_KEYS=$(_load_keys web_start_keys "Starting VNT service|启用|启动�
 WEB_STOP_KEYS=$(_load_keys web_stop_keys "禁用|停用|停止配置|disable|disabled")
 WEB_DELETE_KEYS=$(_load_keys web_delete_keys "删除配置|删除|delete config|deleted config|DELETE /api/config")
 FAULT_RESTART_KEYS=$(_load_keys fault_restart_keys "Registration failed")
-FAULT_ROUTE_KEYS=$(_load_keys fault_route_keys "连接服务器失败|kind: AlreadyExists")
 ONLINE_KEYS=$(_load_keys online_keys "public_addr")
 ONLINE_EXCLUDE_KEYS=$(_load_keys online_exclude_keys "0.0.0.0:0")
 
@@ -261,19 +258,10 @@ reader_loop() {
                     log "Network unavailable, skip restart..."
                 fi
             fi
-        elif _line_has_key "$line" "$FAULT_ROUTE_KEYS"; then
-            if [ "$ROUTE_FIXED" = "0" ] && _network_ok; then
-                ROUTE_FIXED=1
-                if mkdir "$ROUTE_FIX_LOCK" 2>/dev/null; then
-                    log "Server failure detected, fixing routes..."
-                    setsid sh -c '/etc/init.d/vnt2 reload' >/dev/null 2>&1 &
-                fi
-            fi
         elif _line_has_key "$line" "$ONLINE_KEYS"; then
             if _line_has_key "$line" "$ONLINE_EXCLUDE_KEYS"; then
                 :
             else
-                ROUTE_FIXED=0
                 GOT_PUBLIC_ADDR=1
                 ONLINE=1
             fi
