@@ -1184,12 +1184,6 @@ msgstr "故障重启关键字"
 msgid "Matching lines trigger the network check and process restart logic"
 msgstr "匹配行触发网络检查与进程重启逻辑"
 
-msgid "Route Fix Keywords"
-msgstr "路由修复关键字"
-
-msgid "Matching lines trigger the route repair logic"
-msgstr "匹配行触发路由修复逻辑"
-
 msgid "Online Detect Keywords"
 msgstr "上线检测关键字"
 
@@ -1207,3 +1201,4 @@ msgstr "vnt2_web 启动等待超时（秒）"
 
 msgid "Maximum wait for vnt2_web readiness at boot before restoring instance states, default %s seconds"
 msgstr "开机时等待 vnt2_web 就绪并恢复实例状态的最长时间，默认 %s 秒"
+
