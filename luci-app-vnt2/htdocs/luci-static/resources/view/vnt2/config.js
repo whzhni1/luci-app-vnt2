@@ -37,6 +37,7 @@ var _dirty           = false;
 var _listState       = { vnt:{}, vnts:{} };
 var _listStateLoaded = { vnt:false, vnts:false };
 var _statusTimer     = null;
+var _webRowTouched   = {};
 
 function defaultMethod(tab) { return START_METHODS[tab][0]; }
 
@@ -91,6 +92,35 @@ function applyListStateResult(tab, r) {
     _listStateLoaded[tab] = true;
 }
 
+function syncEnabledState(tab, r) {
+    var backup = _listState[tab];
+    applyListStateResult(tab, r);
+    Object.keys(backup || {}).forEach(function(name) {
+        if (backup[name]._dirty && _listState[tab][name]) {
+            _listState[tab][name].enabled = backup[name].enabled;
+            _listState[tab][name]._dirty  = true;
+        }
+    });
+}
+
+function clearDirtyToggles() {
+    Object.keys(_listState).forEach(function(tab) {
+        Object.keys(_listState[tab]).forEach(function(name) {
+            delete _listState[tab][name]._dirty;
+        });
+    });
+}
+
+function refreshToggleCells(self) {
+    document.querySelectorAll('tr[data-cfg-name]').forEach(function(row) {
+        var name  = row.getAttribute('data-cfg-name');
+        var state = _listState[_tab] ? _listState[_tab][name] : null;
+        var box   = row.querySelector('input[type=checkbox]');
+        if (!box || !state || state._dirty) return;
+        if (box.checked !== !!state.enabled) box.checked = !!state.enabled;
+    });
+}
+
 function saveListState(self, silent) {
     var promises = Object.keys(TABS).map(function(tab) {
         if (!_listStateLoaded[tab]) return Promise.resolve({ result: 'ok' });
@@ -108,6 +138,7 @@ function saveListState(self, silent) {
             self._ui.notify(_('Partial save failed'), 'error');
             return;
         }
+        clearDirtyToggles();
         if (!silent) self._ui.notify(_('Configuration saved'), 'success');
         return refreshStatus(self);
     }).catch(function(err) {
@@ -177,15 +208,56 @@ function stopStatusTimer() {
 }
 
 function refreshStatus(self) {
-    return callListInstances().then(function(r) {
-        var parsed   = parseInstanceList(r && r.instances);
-        self._status  = parsed.status;
-        self._webAddr = parsed.webAddr;
-        if (_tab === 'vnt')
-            refreshStatusCells(self);
-        else
-            rebuildTable(self);
+    var enabledSync = callGetEnabled(_tab).then(function(r) {
+        syncEnabledState(_tab, r);
     }).catch(function() {});
+    return Promise.all([
+        enabledSync,
+        callListInstances().then(function(r) {
+            var parsed   = parseInstanceList(r && r.instances);
+            self._status  = parsed.status;
+            self._webAddr = parsed.webAddr;
+            return enabledSync.then(function() {
+                if (_tab === 'vnt') {
+                    refreshStatusCells(self);
+                    refreshToggleCells(self);
+                } else
+                    rebuildTable(self);
+            });
+        })
+    ]).then(function() {
+        if (_tab !== 'vnt') return null;
+        return callListWebInstances().then(function(r) {
+            self._webInsts = parseWebInstances(r);
+            refreshWebInstCells(self);
+        });
+    }).catch(function() {});
+}
+
+function refreshWebInstCells(self) {
+    var web   = self._webInsts || { available:false, items:[] };
+    var items = web.available ? web.items : [];
+    var rows  = [];
+    document.querySelectorAll('tr[data-web-name]').forEach(function(row) {
+        if (row.getAttribute('data-web-name') !== 'vnt2_web') rows.push(row);
+    });
+    if (rows.length !== items.length) { rebuildTable(self); return; }
+    var map = {};
+    items.forEach(function(it) { if (it && it.name) map[it.name] = it; });
+    var stale = false;
+    rows.forEach(function(row) {
+        var it   = map[row.getAttribute('data-web-name')];
+        var cell = row.querySelector('.vnt2-status-cell');
+        if (!it || !cell) { stale = true; return; }
+        cell.innerHTML = '';
+        cell.appendChild(buildWebInstBadge(self, it));
+        var box = row.querySelector('input[type=checkbox]');
+        if (box && Date.now() - (_webRowTouched[it.name] || 0) >= 5000) {
+            var want = it.running === '1';
+            if (box.checked !== want) box.checked = want;
+        }
+    });
+    if (stale) rebuildTable(self);
 }
 
 function rebuildTable(self) {
@@ -331,8 +403,9 @@ function updateWebInstCell(self, it) {
 function buildWebInstRow(self, it) {
     var name   = it.name;
     var orphan = it.exists === '0';
-    var toggle = self._ui.toggleSwitch('vnt2-web-enabled-' + name, it.enabled === '1', function(ev, input) {
+    var toggle = self._ui.toggleSwitch('vnt2-web-enabled-' + name, it.running === '1', function(ev, input) {
         var want = input.checked;
+        _webRowTouched[name] = Date.now();
         callWebInstanceAction(name, want ? 'start' : 'stop').then(function(res) {
             if (res && res.result === 'ok') {
                 it.enabled = want ? '1' : '0';
@@ -432,6 +505,7 @@ function buildRow(self, cfg) {
     var toggle = self._ui.toggleSwitch('vnt2-enabled-' + name, !!state.enabled, function(ev, input) {
         cb = input;
         _listState[tab][name].enabled = input.checked;
+        _listState[tab][name]._dirty  = true;
         var cell = input.closest('tr').querySelector('.vnt2-status-cell');
         if (cell) {
             cell.innerHTML = '';
@@ -1574,4 +1648,5 @@ return view.extend({
     },
     destroy: function() { stopStatusTimer(); }
 });
+
 

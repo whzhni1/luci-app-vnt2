@@ -1181,6 +1181,12 @@ msgstr "含文件名且匹配这些关键字的日志行会删除该实例的 UC
 msgid "Fault Restart Keywords"
 msgstr "故障重启关键字"
 
+msgid "Route Fix Keywords"
+msgstr "路由修复关键字"
+
+msgid "Matching lines trigger the route repair logic"
+msgstr "匹配行触发路由修复逻辑"
+
 msgid "Matching lines trigger the network check and process restart logic"
 msgstr "匹配行触发网络检查与进程重启逻辑"
 

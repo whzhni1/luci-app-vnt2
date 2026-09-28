@@ -249,6 +249,10 @@ return view.extend({
         self._pollFn=function(){
             return callListInstances().then(function(r){
                 self._refreshRows((r&&Array.isArray(r.instances))?r.instances:[]);
+                if (document.getElementById('vnt2-web-expand-row'))
+                    return callListWebInstances().then(function(wr){
+                        self._refreshWebPanel(wr);
+                    }).catch(function(){});
             });
         };
         poll.add(self._pollFn,3);
@@ -342,12 +346,20 @@ return view.extend({
             return;
         }
         if (!row) return;
+        self._restoreWebPanel();
+    },
+
+    _restoreWebPanel: function() {
+        var self = this;
+        var row  = document.getElementById('vnt2-row-web-vnt2_web');
+        if (!row || document.getElementById('vnt2-web-expand-row')) return;
         var tr = E('tr', {'id':'vnt2-web-expand-row'},
             E('td', {'colspan':'7','class':'vnt2-web-expand-cell'},
                 E('div', {'id':'vnt2-web-expand-body','class':'vnt2-web-expand-body'},
                     E('p', {'class':'vnt2-loading'}, _('Loading...')))));
         if (row.nextSibling) row.parentNode.insertBefore(tr, row.nextSibling);
         else row.parentNode.appendChild(tr);
+        var arrow = document.getElementById('vnt2-web-arrow');
         if (arrow) arrow.classList.add('open');
         self._loadWebPanel();
     },
@@ -379,11 +391,13 @@ return view.extend({
             items.map(function(it) { return self._webInstCard(it); }));
     },
 
-    _webInstCard: function(it) {
+    _webInstRunning: function(it) {
+        return it.running === '1' ? true : (it.running === '0' ? false : null);
+    },
+
+    _webInstBtns: function(it) {
         var self    = this;
-        var name    = it.config_name || it.name;
         var running = it.running === '1';
-        var badge   = self._ui.statusBadge(it.running === '1' ? true : (it.running === '0' ? false : null));
         var btns = E('div', {'class':'vnt2-web-inst-btns'});
         ACTIONS.forEach(function(act) {
             var dis = (act.id === 'start') ? running : !running;
@@ -400,13 +414,66 @@ return view.extend({
                 });
             }, dis));
         });
-        return E('div', {'class':'vnt2-web-inst-card'}, [
+        return btns;
+    },
+
+    _webInstCard: function(it) {
+        var self = this;
+        var name = it.config_name || it.name;
+        return E('div', {'class':'vnt2-web-inst-card', 'data-web-file':it.name}, [
             E('div', {'class':'vnt2-web-inst-head'}, [
                 E('span', {'class':'vnt2-web-inst-name','title':name}, name),
-                badge
+                self._ui.statusBadge(self._webInstRunning(it))
             ]),
-            btns
+            self._webInstBtns(it)
         ]);
+    },
+
+    _refreshWebPanel: function(r) {
+        var self      = this;
+        var body      = document.getElementById('vnt2-web-expand-body');
+        if (!body) return;
+        var available = !!(r && r.web_available === '1');
+        var items     = (r && Array.isArray(r.items)) ? r.items : [];
+        if (!available) {
+            var webMain = null;
+            (self._instances || []).forEach(function(i) { if (i.name === 'vnt2_web') webMain = i; });
+            if (webMain && webMain.running) return;
+            body.innerHTML = '';
+            body.appendChild(self._renderWebInstPanel(r));
+            return;
+        }
+        if (!items.length) {
+            body.innerHTML = '';
+            body.appendChild(self._renderWebInstPanel(r));
+            return;
+        }
+        var cards = body.querySelectorAll('.vnt2-web-inst-card');
+        var map   = {};
+        items.forEach(function(it) { if (it && it.name) map[it.name] = it; });
+        var aligned = cards.length === items.length;
+        if (aligned) cards.forEach(function(card) {
+            if (!map[card.getAttribute('data-web-file')]) aligned = false;
+        });
+        if (!aligned) {
+            body.innerHTML = '';
+            body.appendChild(self._renderWebInstPanel(r));
+            return;
+        }
+        items.forEach(function(it) {
+            var card = null;
+            cards.forEach(function(c) { if (c.getAttribute('data-web-file') === it.name) card = c; });
+            if (!card) return;
+            var head  = card.querySelector('.vnt2-web-inst-head');
+            var badge = head ? head.querySelector('.vnt2-status-badge') : null;
+            if (head) {
+                var fresh = self._ui.statusBadge(self._webInstRunning(it));
+                if (badge) head.replaceChild(fresh, badge);
+                else head.appendChild(fresh);
+            }
+            var btns = card.querySelector('.vnt2-web-inst-btns');
+            if (btns) card.replaceChild(self._webInstBtns(it), btns);
+        });
     },
 
     _buildWebBtn: function(inst, hasWeb) {
@@ -798,6 +865,7 @@ return view.extend({
 
     _refreshRows: function(instances) {
         var self=this;
+        self._instances=instances;
         var tableWrap=document.getElementById('vnt2-instance-table-wrap');
         var rows=document.querySelectorAll('#vnt2-instance-tbody tr:not(#vnt2-web-expand-row)');
         var needsRebuild=!document.getElementById('vnt2-instance-tbody') || rows.length!==instances.length;
@@ -807,8 +875,10 @@ return view.extend({
             }
         }
         if (needsRebuild && tableWrap) {
+            var wasExpanded=!!document.getElementById('vnt2-web-expand-row');
             tableWrap.innerHTML='';
             tableWrap.appendChild(self._renderInstanceTable(instances));
+            if (wasExpanded) self._restoreWebPanel();
         }
         instances.forEach(function(inst){
             var running=!!inst.running;
@@ -851,4 +921,5 @@ return view.extend({
         if (this._pollFn) poll.remove(this._pollFn);
     }
 });
+
 

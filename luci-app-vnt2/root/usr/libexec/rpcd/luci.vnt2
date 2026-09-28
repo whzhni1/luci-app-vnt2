@@ -2325,3 +2325,4 @@ switch (argv[0]) {
         warn(`Usage: ${argv[0]} {list|call <method>}\n`);
         exit(1);
 }
+

@@ -4,8 +4,9 @@
 START=99
 STOP=10
 USE_PROCD=1
-EXTRA_COMMANDS="refresh_tuntap_firewall"
-EXTRA_HELP="	refresh_tuntap_firewall  Rescan TUN/TAP devices and reload fw4 include"
+EXTRA_COMMANDS="refresh_tuntap_firewall fw_reload_now"
+EXTRA_HELP="	refresh_tuntap_firewall  Rescan TUN/TAP devices and reload fw4 include
+	fw_reload_now            Reload fw4 rules quietly, start firewall if not loaded"
 
 BIN_PATH="/usr/bin"
 CONFIG_PATH="/etc/vnt2_config"
@@ -256,7 +257,7 @@ scan_tuntap_devices() {
 _schedule_fw_reload() {
     mkdir -p "$RUN_DIR"
     if mkdir "$TUNTAP_RELOAD_LOCK" 2>/dev/null; then
-        setsid sh -c "sleep 1; fw4 reload >/dev/null 2>&1 || /etc/init.d/firewall reload >/dev/null 2>&1; rmdir '$TUNTAP_RELOAD_LOCK' 2>/dev/null" >/dev/null 2>&1 &
+        setsid sh -c "sleep 1; /etc/init.d/vnt2 fw_reload_now; rmdir '$TUNTAP_RELOAD_LOCK' 2>/dev/null" >/dev/null 2>&1 &
     fi
 }
 
@@ -538,8 +539,20 @@ rebuild_fw_zone() {
         "masq=1"
 }
 
+fw_reload_now() {
+    if command -v fw4 >/dev/null 2>&1; then
+        if [ -f /var/run/fw4.state ]; then
+            fw4 -q reload >/dev/null 2>&1
+        else
+            "$INITD/firewall" start >/dev/null 2>&1
+        fi
+    else
+        "$INITD/firewall" reload >/dev/null 2>&1
+    fi
+}
+
 _fw_reload() {
-    fw4 reload 2>/dev/null || "$INITD/firewall" reload
+    fw_reload_now
 }
 
 rebuild_firewall() {
